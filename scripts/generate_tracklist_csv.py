@@ -32,6 +32,7 @@ for item in tracklist_data:
         title = track_info['title']
         bpm = track_info['bpm']
         key = track_info['key']
+        audio_sr = track_info['audio_sr']
         audio_source = track_info['audio_source']
         audio_url = track_info['audio_url']
 
@@ -50,9 +51,10 @@ for item in tracklist_data:
                 'title': title,
                 'bpm': bpm,
                 'key': key,
+                'audio_sr': audio_sr,
                 'audio_source': audio_source,
                 'audio_url': audio_url,
-                'filename': f'{i_track:02}-{track_id}'
+                'filename': f'{i_track:02}_{mix_id}_{track_id}'
             }
             rows.append(row)
         else:
