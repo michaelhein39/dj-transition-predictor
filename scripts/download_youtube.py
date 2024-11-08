@@ -15,7 +15,7 @@ for i, track in df.iterrows():
     output_file = f'data/track/{i:02}_{track.mix_id}_{track.track_id}'
 
     # Check if the file already exists
-    if os.path.exists(output_file + '.wav'):
+    if os.path.exists(f'{output_file}.wav'):
         print(f"File already exists: {output_file}")
         continue  # Skip downloading if file already exists
 
@@ -33,3 +33,11 @@ for i, track in df.iterrows():
     # Download the audio file
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([track.audio_url])
+
+    # Download the audio file from the given URL
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        try:
+            ydl.download([track.audio_url])
+            print(f'Downloaded: {output_file}.wav')
+        except Exception as e:
+            print(f'Error downloading {track.audio_url}: {e}')
