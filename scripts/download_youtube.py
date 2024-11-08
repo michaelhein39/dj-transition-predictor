@@ -14,10 +14,10 @@ for i, track in df.iterrows():
     # Define the output file path
     output_file = f'data/track/{i:02}_{track.mix_id}_{track.track_id}'
 
-    # Check if the file already exists
+    # Skip downloading if file already exists
     if os.path.exists(f'{output_file}.wav'):
         print(f"File already exists: {output_file}")
-        continue  # Skip downloading if file already exists
+        continue
 
     # yt-dlp options
     ydl_opts = {
