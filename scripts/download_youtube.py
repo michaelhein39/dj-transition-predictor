@@ -10,8 +10,6 @@ df = pd.read_csv('data/meta/tracklist.csv', skipinitialspace=True)
 for i, track in df.iterrows():
     if i == 2:
         break
-    if track.audio_source != 'youtube':
-        continue
 
     # Define the output file path
     output_file = f'data/track/{i:02}_{track.mix_id}_{track.track_id}'
