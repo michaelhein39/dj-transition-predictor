@@ -1,6 +1,10 @@
 # Audio files
 *.wav
 
+# Tracklist CSV
+tracklist.csv
+tracklist_trunc.csv
+
 # macOS
 .DS_Store
 
