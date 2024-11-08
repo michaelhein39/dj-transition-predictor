@@ -3,23 +3,20 @@ import os
 import yt_dlp
 
 def download_mixes():
-    df = pd.read_csv('data/meta/tracklist_trunc.csv', skipinitialspace=True)
-    mix_ids = df['mix_id'].unique()
-    mix_df = pd.DataFrame({'mix_id': mix_ids})
+    df = pd.read_csv('data/meta/mixes_trunc.csv', skipinitialspace=True)
 
     os.makedirs('data/mix/', exist_ok=True)
 
-    for i, mix in mix_df.iterrows():
+    for i, mix in df.iterrows():
         mix_id = mix['mix_id']
-        mix_url = df.loc[df['mix_id'] == mix_id, 'mix_audio_url'].iloc[0]
-
+        mix_url = mix['audio_url']
 
         # Define the output file path
-        output_file = f'data/track/{i:02}_{e.mix_id}_{track.track_id}'
+        output_file = f'data/mix/{mix_id}'
 
         # Skip downloading if file already exists
         if os.path.exists(f'{output_file}.wav'):
-            print(f"File already exists: {output_file}")
+            print(f"File already exists: {output_file}.wav")
             continue
 
         # yt-dlp options
@@ -30,20 +27,21 @@ def download_mixes():
                 'key': 'FFmpegExtractAudio',  # Extract only audio
                 'preferredcodec': 'wav',  # Save as .wav file
             }],
-            'ratelimit': 50 * 1024,  # Limit to 50 KB/s
+            'ratelimit': 3072 * 1024,  # Limit to 3 MB/s
+            'sleep_requests': 1,  # Add a 2-second sleep between requests
+            'sleep_interval': 2,  # Add a 2-second sleep between downloads
+            'retry_sleep': {
+                'fragment': 300  # Wait 5 minutes (300 seconds) on 429 HTTP error
+            }
         }
 
         # Download the audio file
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([track.audio_url])
-
-        # Download the audio file from the given URL
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
-                ydl.download([track.audio_url])
+                ydl.download([mix_url])
                 print(f'Downloaded: {output_file}.wav')
             except Exception as e:
-                print(f'Error downloading {track.audio_url}: {e}')
+                print(f'Error downloading {mix_url}: {e}')
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     download_mixes()
