@@ -1,13 +1,14 @@
 import pandas as pd
 import os
 import yt_dlp
+from tqdm import tqdm
 
 def download_tracks():
-    df = pd.read_csv('data/meta/tracklist.csv', skipinitialspace=True)
+    df = pd.read_csv('data/meta/tracks_trunc.csv', skipinitialspace=True)
 
     os.makedirs('data/track/', exist_ok=True)
 
-    for track in df.iterrows():
+    for _, track in tqdm(df.iterrows(), total=len(df), desc='Downloading tracks'):
         mix_id = track['mix_id']
         track_id = track['track_id']
         i_track = track['i_track']
@@ -30,7 +31,7 @@ def download_tracks():
                 'preferredcodec': 'wav',  # Save as .wav file
             }],
             'ratelimit': 3072 * 1024,  # Limit to 3 MB/s
-            'sleep_requests': 1,  # Add a 2-second sleep between requests
+            'sleep_requests': 1,  # Add a 1-second sleep between requests
             'sleep_interval': 2,  # Add a 2-second sleep between downloads
             'retry_sleep': {
                 'fragment': 300  # Wait 5 minutes (300 seconds) on 429 HTTP error
@@ -41,7 +42,6 @@ def download_tracks():
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
                 ydl.download([audio_url])
-                print(f'Downloaded: {output_file}.wav')
             except Exception as e:
                 print(f'Error downloading {audio_url}: {e}')
 
