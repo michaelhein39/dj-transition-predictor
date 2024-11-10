@@ -3,7 +3,7 @@
 def beat_times(path, fps=100):
   """
   BeatTrackingProcessor predicts the beat locations in an audio signal.
-  The output is an array of the time markers (in seconds) of each beat.
+  The output is an array of the time stamps (in seconds) of each beat.
 
   fps: frames per second
   A higher fps will result in more precise beat tracking, but at a higher

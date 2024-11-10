@@ -34,41 +34,75 @@ def beat_times(path, fps=100):
   return beat_times_
 
 
+def melspectrogram(path):
+    audio_signal, sr = librosa.load(path)
+    melspectrogram_ = librosa.feature.melspectrogram(y=audio_signal, sr=sr, n_mels=128)
+    log_melspectrogram = np.log(melspectrogram_ + 1e-3)
+    return log_melspectrogram
+
+
+def beat_melspectrogram(path):
+    beat_times_ = beat_times(path)
+    melspectrogram_ = melspectrogram(path)
+    beat_melspectrogram_ = beat_aggregate(melspectrogram_, beat_times_)
+    return beat_melspectrogram_
+
+
 @memory.cache
 def mfcc(path):
-  sig_, sr = librosa.load(path)
-  mfcc_ = librosa.feature.mfcc(sig_, sr, n_mfcc=12)
+  """
+  Compute MFCC features for an audio signal.
+  The output is an array of size (n_mfcc, n_frames).
+
+  n_mfcc: number of MFCCs that the audio is split into
+  A higher n_mfcc would be desired for capturing a wider range of spectral features.
+
+  norm: whether to normalize the MFCC features
+  """
+  audio_signal, sr = librosa.load(path)
+  mfcc_ = librosa.feature.mfcc(y=audio_signal, sr=sr, n_mfcc=12)
   return mfcc_
 
 
 @memory.cache
 def beat_mfcc(path):
-  beats_ = beats(path)
+  """
+  Aggregates MFCCs by beat.
+  The output is an array of size (n_mfcc, n_beats).
+  """
+  beat_times_ = beat_times(path)
   mfcc_ = mfcc(path)
-  beat_mfcc_ = beat_aggregate(mfcc_, beats_)
+  beat_mfcc_ = beat_aggregate(mfcc_, beat_times_)
   return beat_mfcc_
 
 
 @memory.cache
 def chroma_cens(path):
-  sig, sr = librosa.load(path)
-  chroma_cens_ = librosa.feature.chroma_cens(sig, sr)
+  audio_signal, sr = librosa.load(path)
+  chroma_cens_ = librosa.feature.chroma_cens(y=audio_signal, sr=sr)
   return chroma_cens_
 
 
 @memory.cache
 def beat_chroma_cens(path):
-  beats_ = beats(path)
+  beat_times_ = beat_times(path)
   chroma_cens_ = chroma_cens(path)
-  beat_chroma_cens_ = beat_aggregate(chroma_cens_, beats_)
+  beat_chroma_cens_ = beat_aggregate(chroma_cens_, beat_times_)
   return beat_chroma_cens_
 
 
-def beat_aggregate(feature, beats, frames_per_beat=None):
+def beat_aggregate(feature, beat_times_, frames_per_beat=None):
+  """
+  Takes a feature of a song and "groups" it by beats so that there is a
+  single value for each beat. This allows you to analyze the audio signal
+  in terms of beats rather than individual time stamps.
+  The output is an array of size (n_features, n_beats).
+  """
   max_frame = feature.shape[1]
-  beat_frames = librosa.time_to_frames(beats)
+  beat_frames = librosa.time_to_frames(beat_times_)
   beat_frames = beat_frames[beat_frames < max_frame]
   beat_feature = np.split(feature, beat_frames, axis=1)
+
   # Average for each beat.
   beat_feature = beat_feature[1:-1]  # only use chroma features between beats. not before or after beat
   beat_feature = [f.mean(axis=1) for f in beat_feature]  # average chroma features for each beat
