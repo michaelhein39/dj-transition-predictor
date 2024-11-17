@@ -53,7 +53,7 @@ def generate_tracks_csv():
             # 'played_date': track_info['played_date'],
             # 'posted_time': track_info['posted_time'],
             # 'last_updated_time': track_info['last_updated_time'],
-            'filename': f'{i_track:02}_{mix_id}_{track_id}'
+            'filename': f'{mix_id}_{i_track:02}_{track_id}'
         }
         rows.append(row)
 

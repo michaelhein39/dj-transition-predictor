@@ -1,6 +1,11 @@
 import numpy as np
 import librosa
 from joblib import Memory
+
+# Monkey patch np.float and np.int (used in madmom)
+np.float = float
+np.int = int
+
 from madmom.features.beats import RNNBeatProcessor, BeatTrackingProcessor
 
 # SR = 44100 is the min in the trunc sample
