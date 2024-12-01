@@ -1,6 +1,9 @@
 # Audio files
 *.wav
 
+# Alignment data
+align/
+
 # CSV files
 *.csv
 
