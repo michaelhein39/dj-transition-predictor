@@ -70,6 +70,8 @@ def alignment(mix_id, features=['chroma', 'mfcc'], key_invariant=True):
                 X[:12] = np.roll(X[:12], pitch_shift, axis=0)  # circular pitch shifting
 
             # Subsequence DTW.
+            # Subsequence tag is used because only a subsequence of the mix is
+            # aligned with each track and not the whole mix (used to improve accuracy).
             D, wp = librosa.sequence.dtw(X, Y, subseq=True)
 
             # Compute the cost and keep the results if they are the best.
