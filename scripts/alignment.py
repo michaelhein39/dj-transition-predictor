@@ -6,11 +6,11 @@ from lib.cue import find_cue
 
 Case = namedtuple('Case', ['features', 'key_invariant'])
 CASES = [
-  Case(features=['mfcc'], key_invariant=False),
-  Case(features=['chroma'], key_invariant=False),
-  Case(features=['chroma'], key_invariant=True),
-  Case(features=['chroma', 'mfcc'], key_invariant=False),
-  Case(features=['chroma', 'mfcc'], key_invariant=True),
+    Case(features=['mfcc'], key_invariant=False),
+    Case(features=['chroma'], key_invariant=False),
+    Case(features=['chroma'], key_invariant=True),
+    Case(features=['chroma', 'mfcc'], key_invariant=False),
+    Case(features=['chroma', 'mfcc'], key_invariant=True),
 ]
 
 df_tlist = pd.read_csv('data/meta/tracks_trunc.csv')
@@ -18,10 +18,10 @@ df_mlist = pd.read_csv('data/meta/mixes_trunc.csv')
 
 
 def main():
-  os.makedirs('data/align', exist_ok=True)
-  for _, mix in df_mlist.iterrows():
-    for case in CASES:
-        alignment(mix.mix_id, features=case.features, key_invariant=case.key_invariant)
+    os.makedirs('data/align', exist_ok=True)
+    for _, mix in df_mlist.iterrows():
+        for case in CASES:
+            alignment(mix.mix_id, features=case.features, key_invariant=case.key_invariant)
 
 
 def alignment(mix_id, features=['chroma', 'mfcc'], key_invariant=True):
@@ -110,10 +110,13 @@ def alignment(mix_id, features=['chroma', 'mfcc'], key_invariant=True):
         best_wp_sliced = best_wp[::-1]
 
         # Find the indices of the mix cues in the reversed warp path
-        mix_cue_in_idx = np.where(best_wp_sliced[:, 1] == mix_cue_in_beat)[0][-1]
-        mix_cue_out_idx = np.where(best_wp_sliced[:, 1] == mix_cue_out_beat)[0][0]
+        mix_cue_in_idx = np.where(best_wp_sliced[:, 1] == mix_cue_in_beat)[0][-1]  # Last instance
+        mix_cue_out_idx = np.where(best_wp_sliced[:, 1] == mix_cue_out_beat)[0][0]  # First instance
 
         # Slice the warp path to include only the region between the mix cues
+        # Use mix cues rather than track cues because we want to evaluate how well the track is
+        # aligned to the mix, not the other way around. Also the mix cues seem to be more accurate
+        # than the track cues based on observation.
         best_wp_sliced = best_wp_sliced[mix_cue_in_idx : mix_cue_out_idx + 1]
 
         # Compute the match rate between the track and mix features
