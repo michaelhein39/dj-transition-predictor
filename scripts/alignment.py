@@ -67,27 +67,37 @@ def alignment(mix_id, features=['chroma', 'mfcc'], key_invariant=True):
                 X, Y = track_feature, mix_feature
             else:
                 X, Y = track_feature.copy(), mix_feature.copy()
-                X[:12] = np.roll(X[:12], pitch_shift, axis=0)  # circular pitch shifting
+
+                # Circular pitch shifting only the chroma features (12 is the # of bins)
+                # We do not pitch shift the mfcc features because they have no direct relationship
+                # with musical notes
+                X[:12] = np.roll(X[:12], pitch_shift, axis=0)
 
             # Subsequence DTW.
             # Subsequence tag is used because only a subsequence of the mix is
             # aligned with each track and not the whole mix (used to improve accuracy).
+            # D will have shape (track_feature_length, mix_feature_length).
+            # wp has shape (L, 2), where L is the length of the warping path, and each row contains
+            # the indices of the track feature and the mix feature that are aligned at each point in the warping path.
             D, wp = librosa.sequence.dtw(X, Y, subseq=True)
 
-            # Compute the cost and keep the results if they are the best.
+            # wp will contain indices for the entire track, including parts that are not actually 
+            # used in the mix. So it's length will be the number of beats in the track, not the mix.
+
+            # Calculate the matching function, which represents the cumulative distance between
+            # the track feature and the mix feature at each point in time, normalized by the length 
+            # of the warping path. This allows us to evaluate the quality of the match at each point in time.
             matching_function = D[-1, :] / wp.shape[0]
+
+            # Calculate the cost as the minimum value of the matching function, representing the 
+            # point in time where the track feature and the mix feature are best aligned.
             cost = matching_function.min()
+
             costs.append(cost)
             if cost < best_cost:
                 best_cost = cost
                 best_key_change = pitch_shift
                 best_wp = wp
-
-        # Compute match rate
-        x = best_wp[:, 1][::-1]
-        y = best_wp[:, 0][::-1]
-        dydx = np.diff(y) / np.diff(x)
-        match_rate = (dydx == 1).sum() / len(dydx)
 
         # Compute cue_points
         track_beats = beat_times(track_path)
@@ -96,16 +106,41 @@ def alignment(mix_id, features=['chroma', 'mfcc'], key_invariant=True):
         mix_cue_in_time, track_cue_in_time = mix_beats[mix_cue_in_beat], track_beats[track_cue_in_beat]
         mix_cue_out_time, track_cue_out_time = mix_beats[mix_cue_out_beat], track_beats[track_cue_out_beat]
 
+        # Reverse the warp path to make it easier to find the mix cues
+        best_wp_sliced = best_wp[::-1]
+
+        # Find the indices of the mix cues in the reversed warp path
+        mix_cue_in_idx = np.where(best_wp_sliced[:, 1] == mix_cue_in_beat)[0][-1]
+        mix_cue_out_idx = np.where(best_wp_sliced[:, 1] == mix_cue_out_beat)[0][0]
+
+        # Slice the warp path to include only the region between the mix cues
+        best_wp_sliced = best_wp_sliced[mix_cue_in_idx : mix_cue_out_idx + 1]
+
+        # Compute the match rate between the track and mix features
+        # Get the mix feature indices and track feature indices from the sliced warp path
+        x = best_wp_sliced[:, 1]  # Mix feature beats
+        y = best_wp_sliced[:, 0]  # Track feature beats
+
+        # Compute the differences in the track and mix feature indices
+        dydx = np.diff(y) / np.diff(x)
+
+        # Compute the match rate as the proportion of differences that are equal to 1
+        match_rate = (dydx == 1).sum() / len(dydx)
+
+        # The match rate indicates how well the track and mix features are synchronized,
+        # with a value of 1 indicating perfect synchronization and a value close to 0 
+        # indicating poor synchronization.
+
         data.append((
             mix_id, track.track_id, feature, key_invariant,
-            match_rate, best_key_change, best_cost, costs, best_wp,
+            match_rate, best_key_change, best_cost, costs, best_wp, best_wp_sliced,
             mix_cue_in_time, mix_cue_out_time, track_cue_in_time, track_cue_out_time,
             mix_cue_in_beat, mix_cue_out_beat, track_cue_in_beat, track_cue_out_beat,
         ))
 
     df_result = pd.DataFrame(data, columns=[
         'mix_id', 'track_id', 'feature', 'key_invariant',
-        'match_rate', 'key_change', 'best_cost', 'costs', 'wp',
+        'match_rate', 'key_change', 'best_cost', 'costs', 'wp', 'wp_sliced',
         'mix_cue_in_time', 'mix_cue_out_time', 'track_cue_in_time', 'track_cue_out_time',
         'mix_cue_in_beat', 'mix_cue_out_beat', 'track_cue_in_beat', 'track_cue_out_beat',
     ])
