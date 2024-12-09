@@ -43,7 +43,7 @@ def alignment(mix_id, features=['chroma', 'mfcc'], key_invariant=True):
 
     # Beat times
     # 1D vector
-    mix_beats = beat_times(mix_path)
+    mix_beat_times = beat_times(mix_path)
 
     data = []
     for _, track in df_tlist_curr.iterrows():
@@ -103,8 +103,8 @@ def alignment(mix_id, features=['chroma', 'mfcc'], key_invariant=True):
         track_beats = beat_times(track_path)
         mix_cue_in_beat, track_cue_in_beat = find_cue(best_wp, cue_in=True)
         mix_cue_out_beat, track_cue_out_beat = find_cue(best_wp, cue_in=False)
-        mix_cue_in_time, track_cue_in_time = mix_beats[mix_cue_in_beat], track_beats[track_cue_in_beat]
-        mix_cue_out_time, track_cue_out_time = mix_beats[mix_cue_out_beat], track_beats[track_cue_out_beat]
+        mix_cue_in_time, track_cue_in_time = mix_beat_times[mix_cue_in_beat], track_beats[track_cue_in_beat]
+        mix_cue_out_time, track_cue_out_time = mix_beat_times[mix_cue_out_beat], track_beats[track_cue_out_beat]
 
         # Reverse the warp path to make it easier to find the mix cues
         best_wp_sliced = best_wp[::-1]
