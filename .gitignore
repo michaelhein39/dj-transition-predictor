@@ -4,6 +4,9 @@
 # Alignment data
 align/
 
+# Segmentation data
+segment/
+
 # CSV files
 *.csv
 
