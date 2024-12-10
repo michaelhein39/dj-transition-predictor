@@ -8,15 +8,15 @@ np.int = int
 
 from madmom.features.beats import RNNBeatProcessor, BeatTrackingProcessor
 
-# SR = 44100 is the min in the trunc sample
+SAMPLING_RATE = 22050  # 44100 is the min in the trunc sample, but we use 22050
 memory = Memory('./cache', verbose=1)
 
 @memory.cache
 def beat_activations(path):
   """
   RNNBeatProcessor predicts the beat locations in an audio signal.
-  The output are the activations, which are the probabilities of each time step
-  being a beat.
+  The output are the activations, which are the probabilities of each frame
+  being a beat (100 frames per second).
   """
   beat_processor = RNNBeatProcessor()
   beat_activations_ = beat_processor(path)
@@ -42,9 +42,11 @@ def beat_times(path, fps=100):
 def melspectrogram(path):
     # 22050 may be too small for proper alignment and learning,
     # but 44100 may be too big for our computational power
-    audio_signal, sr = librosa.load(path, sr=22050)
+
+    audio_signal, sr = librosa.load(path, sr=SAMPLING_RATE)
     melspectrogram_ = librosa.feature.melspectrogram(y=audio_signal, sr=sr,
-                                                     n_fft=2048, hop_length=512, n_mels=128)
+                                                     n_fft=2048, hop_length=512,
+                                                     n_mels=128)
     log_melspectrogram = np.log(melspectrogram_ + 1e-3)
     return log_melspectrogram
 
@@ -67,8 +69,10 @@ def mfcc(path):
 
   norm: whether to normalize the MFCC features
   """
-  audio_signal, sr = librosa.load(path)
-  mfcc_ = librosa.feature.mfcc(y=audio_signal, sr=sr, n_mfcc=12)
+  audio_signal, sr = librosa.load(path, sr=SAMPLING_RATE)
+  mfcc_ = librosa.feature.mfcc(y=audio_signal, sr=sr,
+                               n_fft=2048, hop_length=512,
+                               n_mfcc=12)
   return mfcc_
 
 
@@ -86,8 +90,10 @@ def beat_mfcc(path):
 
 @memory.cache
 def chroma_cens(path):
-  audio_signal, sr = librosa.load(path)
-  chroma_cens_ = librosa.feature.chroma_cens(y=audio_signal, sr=sr, n_chroma=12)
+  audio_signal, sr = librosa.load(path, sr=SAMPLING_RATE)
+  chroma_cens_ = librosa.feature.chroma_cens(y=audio_signal, sr=sr,
+                                             hop_length=512,
+                                             n_chroma=12)
   return chroma_cens_
 
 
