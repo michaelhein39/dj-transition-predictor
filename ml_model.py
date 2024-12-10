@@ -10,9 +10,8 @@ import librosa
 SAMPLING_RATE = 22050       # Sampling rate for audio
 HOP_LENGTH = 512            # Hop length for STFT -> mel-spectrogram
 N_MELS = 128                # Number of mel-frequency bins
-TARGET_BPM = 120.0          # Example target BPM for normalization
 SEGMENT_DURATION = 15.0     # 15 seconds segment length
-FADE_PARAMETER_COUNT = 4    # 2 parameters (start, slope) * 2 tracks for volume
+VOLUME_PARAMETER_COUNT = 4    # 2 parameters (start, slope) * 2 tracks for volume
 BANDPASS_PARAMETER_COUNT = 12 # 2 parameters (start, slope) * 3 bands * 2 tracks
 
 # You may adjust these as needed based on your network design:
@@ -24,44 +23,41 @@ EPOCHS = 10
 # Utility Functions
 ############################################################
 
-def resample_to_target_bpm(audio, sr, bpm_orig, bpm_target=TARGET_BPM):
+def adjust_bpm(audio_signal, bpm_orig, bpm_target):
     """
-    Resample audio to match the target BPM.
-    This involves time-stretching the audio so that its tempo matches bpm_target.
+    Time-stretching the audio signal so that its tempo matches bpm_target.
     """
-    # Calculate time-stretch factor:
-    # if original BPM is bpm_orig and target BPM is bpm_target,
-    # factor = bpm_orig / bpm_target. If bpm_orig = 100 and bpm_target = 120,
-    # factor would be 100/120 = 0.8333, meaning we need to speed up slightly.
+    # Calculate scaling factor to adjust the BPM
     time_stretch_factor = bpm_orig / bpm_target
-    # Use librosa's time_stretch (phase vocoder) to match BPM
-    # Note: librosa.time_stretch expects the STFT or the raw time series?
-    # For raw audio, first we could transform to time-freq domain, then apply time stretch,
-    # but librosa.time_stretch works directly on waveforms.
-    audio_stretched = librosa.effects.time_stretch(audio, rate=1.0/time_stretch_factor)
-    return audio_stretched, sr
 
-def audio_to_mel_spectrogram(audio, sr, n_mels=N_MELS, hop_length=HOP_LENGTH):
-    """
-    Convert raw audio to a mel-spectrogram.
-    """
-    S = librosa.feature.melspectrogram(y=audio, sr=sr, n_mels=n_mels, hop_length=hop_length)
-    S_db = librosa.power_to_db(S, ref=np.max)
-    return S_db
+    # Use librosa's time_stretch (phase vocoder) to adjust BPM of audio_signal
+    # without altering pitch
+    stretched_audio_signal = librosa.effects.time_stretch(audio_signal, rate=1.0/time_stretch_factor)
+    return stretched_audio_signal
 
-def pad_spectrogram_to_length(S, target_frames):
+def pad_melspectrogram(S, target_frames, left_side=True):
     """
     Pad or truncate a mel-spectrogram S (shape: n_mels x frames) to have exactly target_frames in time dimension.
-    If S is shorter, pad with zeros. If S is longer, truncate.
+    If left_side is True, pad with zeros on the left. Otherwise pad on the right.
     """
-    n_mels, frames = S.shape
-    if frames < target_frames:
-        # Pad on the right side with zeros
-        pad_amount = target_frames - frames
-        S_padded = np.hstack([S, np.zeros((n_mels, pad_amount))])
+    n_mels, curr_frames = S.shape
+    if curr_frames == target_frames:
+        # No padding or truncation needed
+        return S
+    if curr_frames > target_frames:
+        # Needs to be truncated, not padded
+        print(f'=> ERROR: mel-spectrogram is longer than target duration.')
+        return None
+
+    if left_side:
+        # Pad on the left side with zeros
+        pad_amount = target_frames - curr_frames
+        S_padded = np.hstack([np.zeros((n_mels, pad_amount)), S])
     else:
-        # Truncate if longer than needed (should be rare if we carefully extracted)
-        S_padded = S[:, :target_frames]
+        # Pad on the right side with zeros
+        pad_amount = target_frames - curr_frames
+        S_padded = np.hstack([S, np.zeros((n_mels, pad_amount))])
+        
     return S_padded
 
 def compute_num_frames(duration_sec, sr=SAMPLING_RATE, hop_length=HOP_LENGTH):
