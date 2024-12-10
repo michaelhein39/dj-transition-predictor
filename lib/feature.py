@@ -40,8 +40,11 @@ def beat_times(path, fps=100):
 
 
 def melspectrogram(path):
-    audio_signal, sr = librosa.load(path)
-    melspectrogram_ = librosa.feature.melspectrogram(y=audio_signal, sr=sr, n_mels=128)
+    # 22050 may be too small for proper alignment and learning,
+    # but 44100 may be too big for our computational power
+    audio_signal, sr = librosa.load(path, sr=22050)
+    melspectrogram_ = librosa.feature.melspectrogram(y=audio_signal, sr=sr,
+                                                     n_fft=2048, hop_length=512, n_mels=128)
     log_melspectrogram = np.log(melspectrogram_ + 1e-3)
     return log_melspectrogram
 
