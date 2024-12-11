@@ -36,30 +36,29 @@ def adjust_bpm(audio_signal, bpm_orig, bpm_target):
     stretched_audio_signal = librosa.effects.time_stretch(audio_signal, rate=1.0/time_stretch_factor)
     return stretched_audio_signal
 
-def pad_melspectrogram(S, target_frames, left_side=True):
-    """
-    Pad or truncate a mel-spectrogram S (shape: n_mels x frames) to have exactly target_frames in time dimension.
-    If left_side is True, pad with zeros on the left. Otherwise pad on the right.
-    """
-    n_mels, curr_frames = S.shape
-    if curr_frames == target_frames:
-        # No padding or truncation needed
-        return S
-    if curr_frames > target_frames:
-        # Needs to be truncated, not padded
-        print(f'=> ERROR: mel-spectrogram is longer than target duration.')
-        return None
+# def pad_melspectrogram(S, target_frames, left_side=True):
+#     """
+#     Pad or truncate a mel-spectrogram S (shape: n_mels x frames) to have exactly target_frames in time dimension.
+#     If left_side is True, pad with zeros on the left. Otherwise pad on the right.
+#     """
+#     n_mels, curr_frames = S.shape
+#     if curr_frames == target_frames:
+#         # No padding or truncation needed
+#         return S
+#     if curr_frames > target_frames:
+#         # Needs to be truncated, not padded
+#         raise ValueError(f'mel-spectrogram is longer than target duration.')
 
-    if left_side:
-        # Pad on the left side with zeros
-        pad_amount = target_frames - curr_frames
-        S_padded = np.hstack([np.zeros((n_mels, pad_amount)), S])
-    else:
-        # Pad on the right side with zeros
-        pad_amount = target_frames - curr_frames
-        S_padded = np.hstack([S, np.zeros((n_mels, pad_amount))])
+#     if left_side:
+#         # Pad on the left side with zeros
+#         pad_amount = target_frames - curr_frames
+#         S_padded = np.hstack([np.zeros((n_mels, pad_amount)), S])
+#     else:
+#         # Pad on the right side with zeros
+#         pad_amount = target_frames - curr_frames
+#         S_padded = np.hstack([S, np.zeros((n_mels, pad_amount))])
         
-    return S_padded
+#     return S_padded
 
 def compute_num_frames(duration_sec, sr=SAMPLING_RATE, hop_length=HOP_LENGTH):
     """
@@ -261,6 +260,43 @@ def beat_time_to_frame(beat_time, bpm_orig, bpm_target, sr, hop_length):
 
     return frame_index
 
+def extract_segment(S, start, end, total_frames):
+    """
+    Extract a segment of a mel-spectrogram, padding as necessary to ensure a segment
+    of exactly total_frames frames.
+
+    Parameters:
+        S (numpy.ndarray): Mel-spectrogram with shape (n_mels, n_frames).
+        start (int): Start frame index (inclusive) of the segment.
+        end (int): End frame index (exclusive) of the segment.
+        total_frames (int): Total number of frames in the output segment.
+
+    Returns:
+        numpy.ndarray: Segment of the mel-spectrogram with shape (n_mels, total_frames).
+    """
+    n_mels, n_frames = S.shape
+
+    if start < 0 and end > n_frames:
+        raise ValueError("Start frame is negative and end frame is greater than total frames.")
+
+    if start < 0:
+        # Pad on the left
+        left_pad = abs(start)
+        S_segment = np.hstack([np.zeros((n_mels, left_pad)), S[:, :end]])
+    elif end > n_frames:
+        # Pad on the right
+        right_pad = end - n_frames
+        S_segment = np.hstack([S[:, start:], np.zeros((n_mels, right_pad))])
+    else:
+        # No padding
+        S_segment = S[:, start:end]
+
+    # Ensure the segment has exactly total_frames frames
+    if S_segment.shape[1] < total_frames:
+        raise ValueError("Segment does not have enough frames.")
+    
+    return S_segment
+
 # Pseudocode for data loading:
 # Assume you have:
 #   - S1, S2: raw audio arrays for track 1 and 2
@@ -316,22 +352,8 @@ def prepare_input_segment(S1_audio_signal, S2_audio_signal, S_truth,
     start_s2 = cue_in_frame_s2 - (total_frames - y_frames)
     end_s2 = start_s2 + total_frames
 
-    # Handle boundary conditions
-    # Pad if needed
-    def safe_extract(S, start, end):
-        n_mels, n_frames = S.shape
-        if start < 0:
-            # pad on the left
-            left_pad = abs(start)
-            S_segment = np.hstack([np.zeros((n_mels, left_pad)), S[:, :max(0, end)]])
-        else:
-            S_segment = S[:, start:end] if end <= n_frames else np.hstack([S[:, start:], np.zeros((n_mels, end - n_frames))])
-        # Ensure exact length
-        S_segment = pad_melspectrogram(S_segment, total_frames)
-        return S_segment
-
-    S1_segment = safe_extract(S1_mel, start_s1, end_s1)
-    S2_segment = safe_extract(S2_mel, start_s2, end_s2)
+    S1_segment = extract_segment(S1_mel, start_s1, end_s1, total_frames)
+    S2_segment = extract_segment(S2_mel, start_s2, end_s2, total_frames)
 
     # Convert all to torch tensors
     S1_tensor = torch.tensor(S1_segment, dtype=torch.float32).unsqueeze(0) # shape: (1, N_MELS, T)
