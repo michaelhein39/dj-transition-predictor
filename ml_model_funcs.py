@@ -11,8 +11,8 @@ SAMPLING_RATE = 22050       # Sampling rate for audio
 HOP_LENGTH = 512            # Hop length for STFT -> mel-spectrogram
 N_MELS = 128                # Number of mel-frequency bins
 SEGMENT_DURATION = 15.0     # 15 seconds segment length
-VOLUME_PARAMETER_COUNT = 4    # 2 parameters (start, slope) * 2 tracks for volume
-BANDPASS_PARAMETER_COUNT = 12 # 2 parameters (start, slope) * 3 bands * 2 tracks
+VOLUME_CONTROL_SIGNAL_COUNT = 4     # 2 control signals (start, slope) * 2 tracks for volume
+BANDPASS_CONTROL_SIGNAL_COUNT = 12  # 2 control signals (start, slope) * 3 bands * 2 tracks
 
 # You may adjust these as needed based on your network design:
 LEARNING_RATE = 1e-3
@@ -65,8 +65,8 @@ def compute_num_frames(duration_sec, sr=SAMPLING_RATE, hop_length=HOP_LENGTH):
     Given a duration in seconds, compute how many STFT frames correspond to that duration.
     Number of frames = floor(duration_sec * sr / hop_length)
     """
-    frames = int(np.floor((duration_sec * sr) / hop_length))
-    return frames
+    num_frames = (duration_sec * sr) // hop_length
+    return num_frames
 
 ############################################################
 # Model Definition
@@ -78,11 +78,11 @@ class TransitionPredictor(nn.Module):
     The input will be a tensor of shape: (batch, 2, N_MELS, T)
     - 2 channels: one for S1, one for S2
     - N_MELS mel bins
-    - T frames corresponding to 15 seconds
+    - T frames in the mel-spectrograms (corresponding to 15 seconds)
     """
-    def __init__(self, n_mels=N_MELS, time_frames=1000,  # time_frames is a placeholder; we will compute it dynamically
-                 volume_param_count=FADE_PARAMETER_COUNT, 
-                 band_param_count=BANDPASS_PARAMETER_COUNT):
+    def __init__(self, n_mels=N_MELS, time_frames=645,  # time_frames should be computed dynamically
+                 volume_control_signal_count=VOLUME_CONTROL_SIGNAL_COUNT, 
+                 bandpass_control_signal_count=BANDPASS_CONTROL_SIGNAL_COUNT):
         super(TransitionPredictor, self).__init__()
         
         # Simple CNN (adjust as needed)
@@ -102,86 +102,107 @@ class TransitionPredictor(nn.Module):
         )
 
         # Fully connected layers to map features to parameters
-        # We have total of volume_param_count + band_param_count parameters
+        # We have total of (volume_control_signal_count + bandpass_control_signal_count) outputs
         self.fc = nn.Sequential(
             nn.Linear(64, 128),
             nn.ReLU(),
-            nn.Linear(128, volume_param_count + band_param_count)
+            nn.Linear(128, volume_control_signal_count + bandpass_control_signal_count)
         )
 
     def forward(self, x):
         # x shape: (batch, 2, N_MELS, T)
         features = self.conv_layers(x) # shape: (batch, 64, 1, 1)
         features = features.view(features.size(0), -1)  # (batch, 64)
-        params = self.fc(features)  # (batch, volume_param_count + band_param_count)
-        return params
-
+        control_signals = self.fc(features)  # (batch, volume_control_signal_count + bandpass_control_signal_count)
+        return control_signals
+    
 ############################################################
 # Masking Functions
 ############################################################
 
-def apply_masks(S1, S2, params, n_mels=N_MELS):
+def prelu1(t, st, delta):
     """
-    Given the predicted parameters and the original S1 and S2 spectrograms,
-    apply the volume and band-pass masks to produce the predicted transition spectrogram.
+    PReLU1 function (t - st)*delta clipped between 0 and 1
     
-    params should contain:
-    - volume parameters: [S1_volume_start, S1_volume_slope, S2_volume_start, S2_volume_slope]
-    - band parameters: 12 values corresponding to (low, mid, high) * (start, slope) for S1 and S2
+    Parameters:
+    t (Tensor): time tensor
+    st (float): start time
+    delta (float): slope
     
-    For simplicity, let's just show how we might construct linear ramps.
-    In practice, you will need to define how to segment the frequency bands and apply slopes.
+    Returns:
+    val (Tensor): clipped value
     """
-    # Parse parameters
-    # volume params (2 per track)
-    S1_vol_start, S1_vol_slope, S2_vol_start, S2_vol_slope = params[:4]
+
+    val = (t - st) * delta
+    val = torch.clamp(val, min=0.0, max=1.0)
+    return val
+
+def apply_masks(S1, S2, control_signals, n_mels=128):
+    """
+    Given the predicted control signals and the original S1 and S2 spectrograms,
+    apply volume and band masks using the defined PReLU-based fading functions.
     
-    # band params (6 per track: 3 bands * 2 params each)
-    # Let's assume order: (S1_low_start, S1_low_slope, S1_mid_start, S1_mid_slope, S1_high_start, S1_high_slope,
-    #                      S2_low_start, S2_low_slope, S2_mid_start, S2_mid_slope, S2_high_start, S2_high_slope)
-    band_params = params[4:]
+    control_signals layout:
+    Volume (4 params): [S1_volume_start, S1_volume_slope, S2_volume_start, S2_volume_slope]
+    Bands (12 params): [S1_low_start, S1_low_slope, S1_mid_start, S1_mid_slope, S1_high_start, S1_high_slope,
+                        S2_low_start, S2_low_slope, S2_mid_start, S2_mid_slope, S2_high_start, S2_high_slope]
     
-    # For demonstration, create a time vector:
-    frames = S1.shape[1]
-    time_vector = torch.arange(frames, dtype=torch.float32, device=S1.device)
+    Mask definitions:
+    PReLU1(t, st, δt) = min(max(0, (t - st)*δt), 1)
 
-    # Volume masks (linear ramps)
-    S1_vol_mask = (time_vector - S1_vol_start) * S1_vol_slope
-    S2_vol_mask = (time_vector - S2_vol_start) * S2_vol_slope
+    For volume on S1 (fade-out):
+        M_S1_vol(t) = 1 - PReLU1(t, S1_vol_start, S1_vol_slope)
 
-    # Clip values so that volume stays between 0 and 1
-    S1_vol_mask = torch.clamp(S1_vol_mask, min=0.0, max=1.0)
-    S2_vol_mask = torch.clamp(S2_vol_mask, min=0.0, max=1.0)
+    For volume on S2 (fade-in):
+        M_S2_vol(t) = PReLU1(t, S2_vol_start, S2_vol_slope)
 
-    # Define frequency band splits. For simplicity:
-    # low band: 0 to N_MELS//3
-    # mid band: N_MELS//3 to 2*N_MELS//3
-    # high band: 2*N_MELS//3 to N_MELS
-    low_end = n_mels // 3
-    mid_end = 2 * n_mels // 3
+    Similarly for bands on S1 (fade-out):
+        M_S1_band(t) = 1 - PReLU1(t, S1_band_start, S1_band_slope)
 
-    # Extract band parameters
+    For bands on S2 (fade-in):
+        M_S2_band(t) = PReLU1(t, S2_band_start, S2_band_slope)
+    """
+    
+    # Unpack volume parameters
+    S1_vol_start, S1_vol_slope, S2_vol_start, S2_vol_slope = control_signals[:4]
+    
+    # Unpack band parameters
+    band_control_signals = control_signals[4:]
     (S1_low_start, S1_low_slope,
      S1_mid_start, S1_mid_slope,
      S1_high_start, S1_high_slope,
      S2_low_start, S2_low_slope,
      S2_mid_start, S2_mid_slope,
-     S2_high_start, S2_high_slope) = band_params
+     S2_high_start, S2_high_slope) = band_control_signals
 
-    # Construct band masks similarly (linear ramps)
-    S1_low_mask = torch.clamp((time_vector - S1_low_start)*S1_low_slope, 0, 1)
-    S1_mid_mask = torch.clamp((time_vector - S1_mid_start)*S1_mid_slope, 0, 1)
-    S1_high_mask = torch.clamp((time_vector - S1_high_start)*S1_high_slope, 0, 1)
+    # Frequency bands
+    low_end = n_mels // 3
+    mid_end = 2 * n_mels // 3
 
-    S2_low_mask = torch.clamp((time_vector - S2_low_start)*S2_low_slope, 0, 1)
-    S2_mid_mask = torch.clamp((time_vector - S2_mid_start)*S2_mid_slope, 0, 1)
-    S2_high_mask = torch.clamp((time_vector - S2_high_start)*S2_high_slope, 0, 1)
+    frames = S1.shape[1]
+    time_vector = torch.arange(frames, dtype=torch.float32, device=S1.device)
 
-    # Construct full frequency-time mask for each track
+    # Volume masks
+    # S1 fade-out: M_S1_vol(t) = 1 - PReLU1(t, start, slope)
+    S1_vol_mask = 1.0 - prelu1(time_vector, S1_vol_start, S1_vol_slope)
+    # S2 fade-in: M_S2_vol(t) = PReLU1(t, start, slope)
+    S2_vol_mask = prelu1(time_vector, S2_vol_start, S2_vol_slope)
+
+    # Band masks for S1 (fade-out for each band)
+    S1_low_mask = 1.0 - prelu1(time_vector, S1_low_start, S1_low_slope)
+    S1_mid_mask = 1.0 - prelu1(time_vector, S1_mid_start, S1_mid_slope)
+    S1_high_mask = 1.0 - prelu1(time_vector, S1_high_start, S1_high_slope)
+
+    # Band masks for S2 (fade-in for each band)
+    S2_low_mask = prelu1(time_vector, S2_low_start, S2_low_slope)
+    S2_mid_mask = prelu1(time_vector, S2_mid_start, S2_mid_slope)
+    S2_high_mask = prelu1(time_vector, S2_high_start, S2_high_slope)
+
+    # Construct full masks
     S1_mask = torch.zeros_like(S1)
     S2_mask = torch.zeros_like(S2)
 
-    # Apply band masks and volume masks multiplicatively
+    # For each band, multiply band fade mask by volume mask
     # Low band
     S1_mask[0:low_end, :] = S1_low_mask * S1_vol_mask
     S2_mask[0:low_end, :] = S2_low_mask * S2_vol_mask
@@ -196,6 +217,7 @@ def apply_masks(S1, S2, params, n_mels=N_MELS):
 
     # Apply masks to spectrograms
     S_pred = S1 * S1_mask + S2 * S2_mask
+
     return S_pred
 
 ############################################################
