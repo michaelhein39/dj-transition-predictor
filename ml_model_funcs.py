@@ -312,11 +312,37 @@ def extract_segment(S, start, end, total_frames):
 # 4) Extract 15-second segment around the transition
 # 5) Prepare input batch and S_truth
 
-def prepare_input_segment(S1_audio_signal, S2_audio_signal, S_truth, 
-                          cue_out_time_s1, cue_in_time_s2,
-                          bpm_orig_s1, bpm_orig_s2,
-                          bpm_target, segment_duration=SEGMENT_DURATION,
-                          sr=SAMPLING_RATE, hop_length=HOP_LENGTH):
+def prepare_input_and_truth_label(S1_audio_signal, S2_audio_signal, S_truth, 
+                                  cue_out_time_s1, cue_in_time_s2,
+                                  bpm_orig_s1, bpm_orig_s2,
+                                  bpm_target, segment_duration=SEGMENT_DURATION,
+                                  sr=SAMPLING_RATE, hop_length=HOP_LENGTH):
+    """
+    Prepare a single input batch and corresponding truth label for training.
+
+    Time stretch the two input audio signals to the target BPM, convert to mel-spectrograms,
+    extract a 15-second segment around the cue points, and pad if necessary.
+
+    Finally, convert all to torch tensors and combine the two segments as channels.
+
+    Args:
+        S1_audio_signal: raw audio array for track 1
+        S2_audio_signal: raw audio array for track 2
+        S_truth: mel-spectrogram for the real DJ transition
+        cue_out_time_s1: the cue-out time (in seconds) for S1
+        cue_in_time_s2: the cue-in time (in seconds) for S2
+        bpm_orig_s1: original BPM of S1
+        bpm_orig_s2: original BPM of S2
+        bpm_target: target BPM for time stretching
+        segment_duration: duration of the segment to extract in seconds
+        sr: sampling rate
+        hop_length: hop length for mel-spectrogram computation
+
+    Returns:
+        input_tensor: torch tensor of shape (batch=1, 2, N_MELS, T)
+        S_truth_tensor: torch tensor of shape (batch=1, N_MELS, T)
+    """
+
     # Time stretch S1 and S2 to target BPM
     S1_stretched = adjust_bpm(S1_audio_signal, bpm_orig_s1, bpm_target)
     S2_stretched = adjust_bpm(S2_audio_signal, bpm_orig_s2, bpm_target)
@@ -401,7 +427,7 @@ def train(model, optimizer, train_loader, device='cpu'):
             S_pred = torch.cat(S_pred_list, dim=0)
 
             # Compute loss
-            loss = spectrogram_loss(S_pred, S_truth_tensor)
+            loss = melspectrogram_loss(S_pred, S_truth_tensor)
 
             loss.backward()
             optimizer.step()
@@ -423,11 +449,12 @@ if __name__ == "__main__":
     cue_in_time_s2 = 35.0
     bpm_orig_s1 = 100.0
     bpm_orig_s2 = 130.0
+    bpm_target = 120.0
 
     # Prepare a single example (in real code, this would be part of a dataset and DataLoader)
-    input_tensor, S_truth_tensor = prepare_input_segment(S1_audio, S2_audio, S_truth,
-                                                         cue_out_time_s1, cue_in_time_s2,
-                                                         bpm_orig_s1, bpm_orig_s2)
+    input_tensor, S_truth_tensor = prepare_input_and_truth_label(S1_audio, S2_audio, S_truth,
+                                                                 cue_out_time_s1, cue_in_time_s2,
+                                                                 bpm_orig_s1, bpm_orig_s2, bpm_target)
 
     # Instantiate model and optimizer
     model = TransitionPredictor()
