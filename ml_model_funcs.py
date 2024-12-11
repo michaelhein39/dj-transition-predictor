@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import librosa
+import lib.feature as ft
 
 ############################################################
 # Constants and Hyperparameters
@@ -224,7 +225,7 @@ def apply_masks(S1, S2, control_signals, n_mels=128):
 # Loss Function
 ############################################################
 
-def spectrogram_loss(S_pred, S_truth):
+def melspectrogram_loss(S_pred, S_truth):
     """
     Define a loss function comparing predicted spectrogram to ground truth.
     A simple L1 or L2 loss can be used initially.
@@ -235,6 +236,30 @@ def spectrogram_loss(S_pred, S_truth):
 ############################################################
 # Training Example
 ############################################################
+
+def beat_time_to_frame(beat_time, bpm_orig, bpm_target, sr, hop_length):
+    """
+    Convert an original beat time to the corresponding frame index in the
+    new time-stretched mel-spectrogram.
+
+    Parameters:
+        beat_time (float): Original beat time (in seconds).
+        bpm_orig (float): Original tempo (in BPM).
+        bpm_target (float): Target tempo of stretched audio (in BPM).
+        sr (int): Sampling rate (e.g., 22050 Hz).
+        hop_length (int): Hop length for mel-spectrogram (e.g., 512 samples).
+
+    Returns:
+        int: Frame index in the resampled mel-spectrogram.
+    """
+    # Adjust beat time for the resampled tempo
+    scaling_factor = bpm_orig / bpm_target
+    scaled_time = beat_time * scaling_factor
+
+    # Convert scaled time to frame index in the time-stretched mel-spectrogram
+    frame_index = (scaled_time * sr) // hop_length
+
+    return frame_index
 
 # Pseudocode for data loading:
 # Assume you have:
@@ -251,30 +276,28 @@ def spectrogram_loss(S_pred, S_truth):
 # 4) Extract 15-second segment around the transition
 # 5) Prepare input batch and S_truth
 
-def prepare_input_segment(S1_audio, S2_audio, S_truth, 
+def prepare_input_segment(S1_audio_signal, S2_audio_signal, S_truth, 
                           cue_out_time_s1, cue_in_time_s2,
                           bpm_orig_s1, bpm_orig_s2,
-                          bpm_target=TARGET_BPM, sr=SAMPLING_RATE, hop_length=HOP_LENGTH):
-    # Resample S1 and S2 to target BPM
-    S1_resampled, sr = resample_to_target_bpm(S1_audio, sr, bpm_orig_s1, bpm_target)
-    S2_resampled, sr = resample_to_target_bpm(S2_audio, sr, bpm_orig_s2, bpm_target)
+                          bpm_target, segment_duration=SEGMENT_DURATION,
+                          sr=SAMPLING_RATE, hop_length=HOP_LENGTH):
+    # Time stretch S1 and S2 to target BPM
+    S1_stretched = adjust_bpm(S1_audio_signal, bpm_orig_s1, bpm_target)
+    S2_stretched = adjust_bpm(S2_audio_signal, bpm_orig_s2, bpm_target)
 
     # Convert to mel-spectrograms
-    S1_mel = audio_to_mel_spectrogram(S1_resampled, sr)
-    S2_mel = audio_to_mel_spectrogram(S2_resampled, sr)
+    S1_mel = ft.audio_signal_melspectrogram(S1_stretched, sr)
+    S2_mel = ft.audio_signal_melspectrogram(S2_stretched, sr)
 
-    # Compute frame indices of cue points after resampling
-    # You have a function beat_time_to_resampled_frame provided in your codebase:
-    cue_out_frame_s1 = beat_time_to_resampled_frame(cue_out_time_s1, bpm_orig_s1, bpm_target, sr, hop_length)
-    cue_in_frame_s2 = beat_time_to_resampled_frame(cue_in_time_s2, bpm_orig_s2, bpm_target, sr, hop_length)
+    # Compute frame indices of cue points after time stretching
+    cue_out_frame_s1 = beat_time_to_frame(cue_out_time_s1, bpm_orig_s1, bpm_target, sr, hop_length)
+    cue_in_frame_s2 = beat_time_to_frame(cue_in_time_s2, bpm_orig_s2, bpm_target, sr, hop_length)
     
-    # Determine how many frames correspond to 15 seconds
-    total_frames = compute_num_frames(SEGMENT_DURATION, sr, hop_length) 
+    # Determine how many frames correspond to segment_duration seconds
+    total_frames = compute_num_frames(segment_duration, sr, hop_length) 
     
-    # Suppose we know z = cue_in_frame_s2 - cue_out_frame_s1 is the overlap region
-    # If z < total_frames, we need to add (x seconds before and y seconds after)
-    # For simplicity, assume we have z_frames = some calculation based on S_truth length:
-    z_frames = S_truth.shape[1]  # ground truth transition frames
+    # Determine necessary padding
+    z_frames = S_truth.shape[1]  # original number of ground truth transition frames
     if z_frames < total_frames:
         # x and y split the remaining time
         remainder = total_frames - z_frames
@@ -286,11 +309,11 @@ def prepare_input_segment(S1_audio, S2_audio, S_truth,
         y_frames = 0
 
     # Extract segments from S1 and S2
-    # S1 segment: start from cue_out_frame_s1 - x_frames and go until cue_out_frame_s1 + z_frames + y_frames
-    # But we only need 15 seconds total. So total_frames = x_frames + z_frames + y_frames.
+    # S1 segment: start from cue_out_frame_s1 - x_frames and go for total_frames
     start_s1 = cue_out_frame_s1 - x_frames
     end_s1 = start_s1 + total_frames
-    start_s2 = (cue_in_frame_s2 - (total_frames - y_frames)) # (15 - y) seconds before cue_in
+
+    start_s2 = cue_in_frame_s2 - (total_frames - y_frames)
     end_s2 = start_s2 + total_frames
 
     # Handle boundary conditions
@@ -304,7 +327,7 @@ def prepare_input_segment(S1_audio, S2_audio, S_truth,
         else:
             S_segment = S[:, start:end] if end <= n_frames else np.hstack([S[:, start:], np.zeros((n_mels, end - n_frames))])
         # Ensure exact length
-        S_segment = pad_spectrogram_to_length(S_segment, total_frames)
+        S_segment = pad_melspectrogram(S_segment, total_frames)
         return S_segment
 
     S1_segment = safe_extract(S1_mel, start_s1, end_s1)
@@ -334,7 +357,7 @@ def train(model, optimizer, train_loader, device='cpu'):
             optimizer.zero_grad()
 
             # Forward pass
-            params = model(input_tensor)  # (batch, volume+band parameters)
+            control_signals = model(input_tensor)  # (batch, volume+band parameters)
 
             # We need S1 and S2 (as tensors) again to apply masks
             # In a real scenario, you store S1, S2 alongside S_truth in the dataset
@@ -350,8 +373,8 @@ def train(model, optimizer, train_loader, device='cpu'):
             # apply_masks expects parameters as a vector; we can do this per example
             # If batch size > 1, loop or vectorize:
             S_pred_list = []
-            for i in range(params.size(0)):
-                S_pred_example = apply_masks(S1_tensor[i], S2_tensor[i], params[i])
+            for i in range(control_signals.size(0)):
+                S_pred_example = apply_masks(S1_tensor[i], S2_tensor[i], control_signals[i])
                 S_pred_list.append(S_pred_example.unsqueeze(0))
             S_pred = torch.cat(S_pred_list, dim=0)
 
