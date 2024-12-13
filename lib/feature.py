@@ -81,8 +81,6 @@ def mfcc(path):
 
   n_mfcc: number of MFCCs that the audio is split into
   A higher n_mfcc would be desired for capturing a wider range of spectral features.
-
-  norm: whether to normalize the MFCC features
   """
   audio_signal, sr = librosa.load(path, sr=SAMPLING_RATE)
   mfcc_ = librosa.feature.mfcc(y=audio_signal, sr=sr,

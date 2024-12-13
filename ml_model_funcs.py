@@ -279,6 +279,8 @@ def extract_segment(S, start, end, total_frames):
     if start < 0 and end > n_frames:
         raise ValueError("Start frame is negative and end frame is greater than total frames.")
 
+    # This assumes that only one of these conditions is true, when in reality
+    # it's possible for both to be true.
     if start < 0:
         # Pad on the left
         left_pad = abs(start)
