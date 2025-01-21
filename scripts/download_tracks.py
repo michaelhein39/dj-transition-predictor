@@ -28,11 +28,12 @@ def download_tracks():
             'format': 'bestaudio/best',  # Get best available audio
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',  # Extract only audio
-                'preferredcodec': 'wav',  # Save as .wav file
+                'preferredcodec': 'mp3',      # Save as .mp3 file
+                'preferredquality': '320',    # Set desired bitrate (in kb/s)
             }],
             'ratelimit': 3072 * 1024,  # Limit to 3 MB/s
-            'sleep_requests': 1,  # Add a 1-second sleep between requests
-            'sleep_interval': 2,  # Add a 2-second sleep between downloads
+            'sleep_requests': 1,       # Add a 1-second sleep between requests
+            'sleep_interval': 2,       # Add a 2-second sleep between downloads
             'retry_sleep': {
                 'fragment': 300  # Wait 5 minutes (300 seconds) on 429 HTTP error
             }
@@ -44,6 +45,8 @@ def download_tracks():
                 ydl.download([audio_url])
             except Exception as e:
                 print(f'Error downloading {audio_url}: {e}')
+
+        break
 
 if __name__ == "__main__":
     download_tracks()
