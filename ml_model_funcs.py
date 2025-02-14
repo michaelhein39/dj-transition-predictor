@@ -36,37 +36,39 @@ def adjust_bpm(audio_signal, bpm_orig, bpm_target):
     stretched_audio_signal = librosa.effects.time_stretch(audio_signal, rate=1.0/time_stretch_factor)
     return stretched_audio_signal
 
-# def pad_melspectrogram(S, target_frames, left_side=True):
-#     """
-#     Pad or truncate a mel-spectrogram S (shape: n_mels x frames) to have exactly target_frames in time dimension.
-#     If left_side is True, pad with zeros on the left. Otherwise pad on the right.
-#     """
-#     n_mels, curr_frames = S.shape
-#     if curr_frames == target_frames:
-#         # No padding or truncation needed
-#         return S
-#     if curr_frames > target_frames:
-#         # Needs to be truncated, not padded
-#         raise ValueError(f'mel-spectrogram is longer than target duration.')
-
-#     if left_side:
-#         # Pad on the left side with zeros
-#         pad_amount = target_frames - curr_frames
-#         S_padded = np.hstack([np.zeros((n_mels, pad_amount)), S])
-#     else:
-#         # Pad on the right side with zeros
-#         pad_amount = target_frames - curr_frames
-#         S_padded = np.hstack([S, np.zeros((n_mels, pad_amount))])
-        
-#     return S_padded
-
 def compute_num_frames(duration_sec, sr=SAMPLING_RATE, hop_length=HOP_LENGTH):
     """
     Given a duration in seconds, compute how many STFT frames correspond to that duration.
     Number of frames = floor(duration_sec * sr / hop_length)
+
+    This equates to 645 frames for 15 seconds.
     """
     num_frames = (duration_sec * sr) // hop_length
     return num_frames
+
+def beat_time_to_frame(beat_time, bpm_orig, bpm_target, sr, hop_length):
+    """
+    Convert an original beat time to the corresponding frame index in the
+    new time-stretched mel-spectrogram.
+
+    Parameters:
+        beat_time (float): Original beat time (in seconds).
+        bpm_orig (float): Original tempo (in BPM).
+        bpm_target (float): Target tempo of stretched audio (in BPM).
+        sr (int): Sampling rate (e.g., 22050 Hz).
+        hop_length (int): Hop length for mel-spectrogram (e.g., 512 samples).
+
+    Returns:
+        int: Frame index in the resampled mel-spectrogram.
+    """
+    # Adjust beat time for the resampled tempo
+    scaling_factor = bpm_orig / bpm_target
+    scaled_time = beat_time * scaling_factor
+
+    # Convert scaled time to frame index in the time-stretched mel-spectrogram
+    frame_index = (scaled_time * sr) // hop_length
+
+    return frame_index
 
 ############################################################
 # Model Definition
@@ -80,13 +82,13 @@ class TransitionPredictor(nn.Module):
     - N_MELS mel bins
     - T frames in the mel-spectrograms (corresponding to 15 seconds)
     """
-    def __init__(self, n_mels=N_MELS, time_frames=645,  # time_frames should be computed dynamically
+    def __init__(self,
                  volume_control_signal_count=VOLUME_CONTROL_SIGNAL_COUNT, 
                  bandpass_control_signal_count=BANDPASS_CONTROL_SIGNAL_COUNT):
         super(TransitionPredictor, self).__init__()
         
         # Simple CNN (adjust as needed)
-        # We will reduce temporal dimension and extract features
+        # Reduces spatial dimensions and extracts features
         self.conv_layers = nn.Sequential(
             nn.Conv2d(in_channels=2, out_channels=16, kernel_size=(3,3), stride=(1,1), padding=(1,1)),
             nn.ReLU(),
@@ -101,8 +103,8 @@ class TransitionPredictor(nn.Module):
             nn.AdaptiveAvgPool2d((1,1))  # reduce to a single feature vector
         )
 
-        # Fully connected layers to map features to parameters
-        # We have total of (volume_control_signal_count + bandpass_control_signal_count) outputs
+        # Fully connected layers to map features to control signals
+        # Total of (volume_control_signal_count + bandpass_control_signal_count) outputs
         self.fc = nn.Sequential(
             nn.Linear(64, 128),
             nn.ReLU(),
@@ -235,30 +237,6 @@ def melspectrogram_loss(S_pred, S_truth):
 ############################################################
 # Training Example
 ############################################################
-
-def beat_time_to_frame(beat_time, bpm_orig, bpm_target, sr, hop_length):
-    """
-    Convert an original beat time to the corresponding frame index in the
-    new time-stretched mel-spectrogram.
-
-    Parameters:
-        beat_time (float): Original beat time (in seconds).
-        bpm_orig (float): Original tempo (in BPM).
-        bpm_target (float): Target tempo of stretched audio (in BPM).
-        sr (int): Sampling rate (e.g., 22050 Hz).
-        hop_length (int): Hop length for mel-spectrogram (e.g., 512 samples).
-
-    Returns:
-        int: Frame index in the resampled mel-spectrogram.
-    """
-    # Adjust beat time for the resampled tempo
-    scaling_factor = bpm_orig / bpm_target
-    scaled_time = beat_time * scaling_factor
-
-    # Convert scaled time to frame index in the time-stretched mel-spectrogram
-    frame_index = (scaled_time * sr) // hop_length
-
-    return frame_index
 
 def extract_segment(S, start, end, total_frames):
     """
@@ -394,47 +372,96 @@ def prepare_input_and_truth_label(S1_audio_signal, S2_audio_signal, S_truth,
     return input_tensor, S_truth_tensor
 
 
-# Example usage in a training loop (simplified):
-def train(model, optimizer, train_loader, device='cpu'):
+def train_model(model, 
+                train_loader, 
+                optimizer, 
+                epochs=10, 
+                device='cpu'):
+    """
+    Train the TransitionPredictor model using spectrogram masking and an MSE loss.
+    This version expects the DataLoader to yield only (input_tensor, S_truth_tensor),
+    where input_tensor has shape (batch, 2, N_MELS, T).
+    We slice out S1 and S2 from the input tensor inside the loop.
+    
+    Args:
+        model (nn.Module): The TransitionPredictor (or equivalent) model.
+        train_loader (DataLoader or iterable): Yields batches of 
+            (input_tensor, S_truth_tensor).
+            - input_tensor: shape (batch, 2, N_MELS, T)
+            - S_truth_tensor: shape (batch, N_MELS, T)
+        optimizer (torch.optim.Optimizer): Optimizer (e.g. Adam) for model parameters.
+        epochs (int): Number of epochs to train.
+        device (str): 'cpu' or 'cuda'.
+        
+    Returns:
+        None: The model is trained in-place. Prints loss after each epoch.
+    """
+
+    # Move model to the specified device (GPU or CPU)
+    model.to(device)
     model.train()
-    for epoch in range(EPOCHS):
-        for batch in train_loader:
-            # batch should contain input_tensor and S_truth_tensor
-            input_tensor, S_truth_tensor = batch
-            input_tensor = input_tensor.to(device)
-            S_truth_tensor = S_truth_tensor.to(device)
 
+    # Loop over epochs
+    for epoch in range(epochs):
+        epoch_loss = 0.0
+        num_batches = 0
+        
+        # Iterate over batches from the train_loader
+        for batch_idx, batch_data in enumerate(train_loader):
+            # Expecting batch_data = (input_tensor, S_truth_tensor)
+            input_tensor, S_truth_tensor = batch_data
+            
+            # Move data to device
+            input_tensor = input_tensor.to(device)     # shape: (batch, 2, N_MELS, T)
+            S_truth_tensor = S_truth_tensor.to(device) # shape: (batch, N_MELS, T)
+
+            # Reset gradients from previous iteration
             optimizer.zero_grad()
-
-            # Forward pass
-            control_signals = model(input_tensor)  # (batch, volume+band parameters)
-
-            # We need S1 and S2 (as tensors) again to apply masks
-            # In a real scenario, you store S1, S2 alongside S_truth in the dataset
-            # Here we assume they come together:
-            # Let's say your dataset returns (input_tensor, S_truth_tensor, S1_tensor, S2_tensor)
-            # For simplicity, assume you have them:
-            # S1_tensor, S2_tensor = ...
-            # Just placeholders:
-            S1_tensor = input_tensor[:,0,:,:]  # shape (batch, N_MELS, T)
-            S2_tensor = input_tensor[:,1,:,:]  # shape (batch, N_MELS, T)
-
-            # Apply predicted masks to get S_pred
-            # apply_masks expects parameters as a vector; we can do this per example
-            # If batch size > 1, loop or vectorize:
+            
+            # Forward pass: model predicts the control signals
+            # control_signals shape: (batch, volume_control_signal_count + bandpass_control_signal_count)
+            control_signals = model(input_tensor)
+            
+            # We'll accumulate each example's predicted spectrogram, then stack them.
+            batch_size = control_signals.size(0)
             S_pred_list = []
-            for i in range(control_signals.size(0)):
-                S_pred_example = apply_masks(S1_tensor[i], S2_tensor[i], control_signals[i])
-                S_pred_list.append(S_pred_example.unsqueeze(0))
+            
+            for i in range(batch_size):
+                # Extract the control signals for the i-th item in the batch
+                # shape: (volume_control_signal_count + bandpass_control_signal_count,)
+                ctrl_signals_i = control_signals[i]
+
+                # Slice the i-th example from input_tensor => shape: (2, N_MELS, T)
+                # Then extract the channels for S1 and S2
+                S_i = input_tensor[i]    # shape: (2, N_MELS, T)
+                S1_i = S_i[0]           # shape: (N_MELS, T)
+                S2_i = S_i[1]           # shape: (N_MELS, T)
+
+                # apply_masks returns a tensor of shape (N_MELS, T)
+                S_pred_i = apply_masks(S1_i, S2_i, ctrl_signals_i, n_mels=S1_i.size(0))
+                S_pred_list.append(S_pred_i.unsqueeze(0))
+            
+            # Stack all predicted spectrograms in the batch
+            # final shape: (batch, N_MELS, T)
             S_pred = torch.cat(S_pred_list, dim=0)
 
-            # Compute loss
+            # Compute loss against ground truth
             loss = melspectrogram_loss(S_pred, S_truth_tensor)
-
+            
+            # Backpropagation
             loss.backward()
+            
+            # Gradient update
             optimizer.step()
+            
+            # Accumulate loss
+            epoch_loss += loss.item()
+            num_batches += 1
+        
+        # Print average loss for this epoch
+        avg_loss = epoch_loss / num_batches if num_batches > 0 else 0.0
+        print(f"Epoch [{epoch+1}/{epochs}], Loss: {avg_loss:.6f}")
 
-        print(f"Epoch {epoch+1}/{EPOCHS}, Loss: {loss.item()}")
 
 ############################################################
 # Putting it all together:
