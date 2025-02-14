@@ -1,9 +1,9 @@
-# src/models.py
-
 import torch.nn as nn
+
 
 VOLUME_CONTROL_SIGNAL_COUNT = 4     # 2 control signals (start, slope) * 2 tracks for volume
 BANDPASS_CONTROL_SIGNAL_COUNT = 12  # 2 control signals (start, slope) * 3 bands * 2 tracks
+
 
 class TransitionPredictor(nn.Module):
     """

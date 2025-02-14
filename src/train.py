@@ -94,6 +94,7 @@ def train_model(model,
 ############################################################
 # Loss Functions
 ############################################################
+
 def melspectrogram_loss(S_pred, S_truth):
     """
     Define a loss function comparing predicted spectrogram to ground truth.
@@ -101,6 +102,7 @@ def melspectrogram_loss(S_pred, S_truth):
     """
     loss_fn = nn.MSELoss()
     return loss_fn(S_pred, S_truth)
+
 
 ############################################################
 # Masking Functions
