@@ -1,3 +1,22 @@
+"""
+Pseudocode for data preprocessing.
+
+Assume you have:
+    - S1, S2: raw audio arrays for track 1 and 2
+    - S_truth: mel-spectrogram for the real DJ transition
+    - cue_out_time_s1: the cue-out time (in seconds) for S1
+    - cue_in_time_s2: the cue-in time (in seconds) for S2
+    - bpm_orig_s1, bpm_orig_s2: original BPMs of S1 and S2
+Steps:
+    1) Resample S1 and S2 to TARGET_BPM
+    2) Extract mel-spectrograms
+    3) Compute frame indices for cue points using beat_time_to_resampled_frame
+    4) Extract 15-second segment around the transition
+    5) Prepare input batch and S_truth
+
+"""
+
+
 import os
 import torch
 import librosa
@@ -11,6 +30,17 @@ SEGMENT_DURATION = 15.0     # 15 seconds segment length
 
 
 def preprocess_and_save(audio_data, cue_points, bpm_data, S_truth_data, sr, hop_length, segment_duration, save_dir):
+    """
+    Args:
+        audio_data (list of tuples): List of (S1_audio_signal, S2_audio_signal) tuples.
+        cue_points (list of tuples): List of (cue_out_time_s1, cue_in_time_s2) tuples.
+        bpm_data (list of tuples): List of (bpm_orig_s1, bpm_orig_s2, target_bpm) tuples.
+        S_truth_data (list): List of mel-spectrograms for the real DJ transitions.
+        sr (int): Sampling rate.
+        hop_length (int): Hop length for mel-spectrogram computation.
+        segment_duration (float): Duration of the segment to extract in seconds.
+        save_dir (str): Directory to save the processed data.
+    """
     os.makedirs(save_dir, exist_ok=True)
     for idx, (S1_audio_signal, S2_audio_signal) in enumerate(audio_data):
         cue_out_time_s1, cue_in_time_s2 = cue_points[idx]
