@@ -22,6 +22,7 @@ import torch
 import librosa
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 import lib.feature as ft
 
 
@@ -29,11 +30,11 @@ SAMPLING_RATE = 22050       # Sampling rate for audio
 HOP_LENGTH = 512            # Hop length for STFT -> mel-spectrogram
 SEGMENT_DURATION = 15.0     # 15 seconds segment length
 
-def main(csv_file, save_dir):
+def main(csv_file, save_dir, overwrite=False):
     os.makedirs(save_dir, exist_ok=True)
 
     df = pd.read_csv(csv_file)
-    for idx, row in df.iterrows():
+    for idx, row in tqdm(df.iterrows(), total=len(df), desc="Preprocessing", unit="sample"):
         S1_audio_path = row['path_S1']
         S2_audio_path = row['path_S2']
         mix_audio_path = row['mix_path']
@@ -46,6 +47,13 @@ def main(csv_file, save_dir):
         bpm_orig_s1 = row['bpm_orig_s1']
         bpm_orig_s2 = row['bpm_orig_s2']
         bpm_target = row['bpm_target']
+
+        # Skip if file already exists and overwrite is not enabled
+        file_name = f"sample_{idx}.pt"
+        file_path = os.path.join(save_dir, file_name)
+        if os.path.exists(file_path) and not overwrite:
+            print(f"Skipping {file_name}, already exists.")
+            continue
 
         S1_audio_signal, _ = librosa.load(S1_audio_path, sr=SAMPLING_RATE)
         S2_audio_signal, _ = librosa.load(S2_audio_path, sr=SAMPLING_RATE)
@@ -60,7 +68,7 @@ def main(csv_file, save_dir):
         )
         
         # Save the processed data
-        torch.save((input_tensor, S_truth_tensor), os.path.join(save_dir, f'sample_{idx}.pt'))
+        torch.save((input_tensor, S_truth_tensor), file_path)
 
 
 def generate_training_tensors(S1_audio_signal, S2_audio_signal, mix_audio_signal, 
@@ -253,4 +261,4 @@ if __name__ == "__main__":
     # Directory to save the preprocessed data
     save_dir = 'data/processed'
 
-    main(csv_file, save_dir)
+    main(csv_file, save_dir, overwrite=False)
