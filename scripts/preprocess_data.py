@@ -8,7 +8,7 @@ Assume you have:
     - cue_in_time_s2: the cue-in time (in seconds) for S2
     - bpm_orig_s1, bpm_orig_s2: original BPMs of S1 and S2
 Steps:
-    1) Resample S1 and S2 to TARGET_BPM
+    1) Time stretch S1 and S2 to target BPM
     2) Extract mel-spectrograms
     3) Compute frame indices for cue points using beat_time_to_resampled_frame
     4) Extract 15-second segment around the transition
@@ -52,7 +52,7 @@ def main(csv_file, save_dir):
         mix_audio_signal, _ = librosa.load(mix_audio_path, sr=SAMPLING_RATE)
 
         # Create input and truth tensors
-        input_tensor, S_truth_tensor = create_input_and_label(
+        input_tensor, S_truth_tensor = generate_training_tensors(
             S1_audio_signal, S2_audio_signal, mix_audio_signal,
             cue_out_time_s1, cue_in_time_s2,
             cue_in_time_mix, cue_out_time_mix,
@@ -63,11 +63,12 @@ def main(csv_file, save_dir):
         torch.save((input_tensor, S_truth_tensor), os.path.join(save_dir, f'sample_{idx}.pt'))
 
 
-def create_input_and_label(S1_audio_signal, S2_audio_signal, mix_audio_signal, 
-                                  cue_out_time_s1, cue_in_time_s2,
-                                  bpm_orig_s1, bpm_orig_s2,
-                                  bpm_target, segment_duration=SEGMENT_DURATION,
-                                  sr=SAMPLING_RATE, hop_length=HOP_LENGTH):
+def generate_training_tensors(S1_audio_signal, S2_audio_signal, mix_audio_signal, 
+                              cue_out_time_s1, cue_in_time_s2,
+                              cue_in_time_mix, cue_out_time_mix,
+                              bpm_orig_s1, bpm_orig_s2,
+                              bpm_target, segment_duration=SEGMENT_DURATION,
+                              sr=SAMPLING_RATE, hop_length=HOP_LENGTH):
     """
     Prepare a single input batch and corresponding truth label for training.
 
@@ -79,21 +80,21 @@ def create_input_and_label(S1_audio_signal, S2_audio_signal, mix_audio_signal,
     Args:
         S1_audio_signal: raw audio array for track 1
         S2_audio_signal: raw audio array for track 2
-        S_truth_audio_signal: raw audio array for the mix containing the real DJ transition
+        mix_audio_signal: raw audio array for the mix containing the real DJ transition
         cue_out_time_s1: the cue-out time (in seconds) for S1
         cue_in_time_s2: the cue-in time (in seconds) for S2
         cue_in_time_mix: the cue-in time (in seconds) for the mix
         cue_out_time_mix: the cue-out time (in seconds) for the mix
         bpm_orig_s1: original BPM of S1
         bpm_orig_s2: original BPM of S2
-        bpm_target: target BPM for time stretching
+        bpm_target: target BPM (from the mix) for time stretching
         segment_duration: duration of the segment to extract in seconds
         sr: sampling rate
         hop_length: hop length for mel-spectrogram computation
 
     Returns:
-        input_tensor: torch tensor of shape (batch=1, 2, N_MELS, T)
-        S_truth_tensor: torch tensor of shape (batch=1, N_MELS, T)
+        input_tensor: torch tensor of shape (batch=1, 2, N_MELS, F)
+        S_truth_tensor: torch tensor of shape (batch=1, N_MELS, F)
     """
 
     # Time stretch S1 and S2 to target BPM
@@ -103,17 +104,21 @@ def create_input_and_label(S1_audio_signal, S2_audio_signal, mix_audio_signal,
     # Convert to mel-spectrograms
     S1_mel = ft.audio_signal_melspectrogram(S1_stretched, sr)
     S2_mel = ft.audio_signal_melspectrogram(S2_stretched, sr)
-    S_truth_mel = ft.audio_signal_melspectrogram(S_mix_audio_signal, sr)
+    mix_mel = ft.audio_signal_melspectrogram(mix_audio_signal, sr)
 
     # Compute frame indices of cue points after time stretching
     cue_out_frame_s1 = convert_beat_time_to_frame(cue_out_time_s1, bpm_orig_s1, bpm_target, sr, hop_length)
     cue_in_frame_s2 = convert_beat_time_to_frame(cue_in_time_s2, bpm_orig_s2, bpm_target, sr, hop_length)
-    
-    # Determine how many frames correspond to segment_duration seconds
-    total_frames = compute_num_frames(segment_duration, sr, hop_length) 
-    
+    cue_in_frame_mix = convert_beat_time_to_frame(cue_in_time_mix, bpm_target, bpm_target, sr, hop_length)
+    cue_out_frame_mix = convert_beat_time_to_frame(cue_out_time_mix, bpm_target, bpm_target, sr, hop_length)
+
+    # Original number of ground truth transition frames
+    z_frames = cue_out_frame_mix - cue_in_frame_mix + 1
+
+    # Number of frames corresponding to segment_duration seconds
+    total_frames = compute_num_frames(segment_duration, sr, hop_length)
+
     # Determine necessary padding
-    z_frames = S_truth_mel.shape[1]  # original number of ground truth transition frames
     if z_frames < total_frames:
         # x and y split the remaining time
         remainder = total_frames - z_frames
@@ -124,7 +129,7 @@ def create_input_and_label(S1_audio_signal, S2_audio_signal, mix_audio_signal,
         x_frames = 0
         y_frames = 0
 
-    # Extract segments from S1 and S2
+    # Extract segments from S1, S2, and mix
     # S1 segment: start from cue_out_frame_s1 - x_frames and go for total_frames
     start_s1 = cue_out_frame_s1 - x_frames
     end_s1 = start_s1 + total_frames
@@ -132,15 +137,21 @@ def create_input_and_label(S1_audio_signal, S2_audio_signal, mix_audio_signal,
     start_s2 = cue_in_frame_s2 - (total_frames - y_frames)
     end_s2 = start_s2 + total_frames
 
+    start_mix = cue_in_frame_mix - x_frames
+    end_mix = cue_out_frame_mix + y_frames + 1
+    if end_mix - start_mix != total_frames:
+        raise ValueError("Padding issue")
+
     S1_segment = segment_melspectrogram(S1_mel, start_s1, end_s1, total_frames)
     S2_segment = segment_melspectrogram(S2_mel, start_s2, end_s2, total_frames)
+    S_truth_segment = segment_melspectrogram(mix_mel, start_mix, end_mix, total_frames)
 
     # Convert all to torch tensors
-    S1_tensor = torch.tensor(S1_segment, dtype=torch.float32).unsqueeze(0) # shape: (1, N_MELS, T)
-    S2_tensor = torch.tensor(S2_segment, dtype=torch.float32).unsqueeze(0) # shape: (1, N_MELS, T)
-    S_truth_tensor = torch.tensor(S_truth_mel, dtype=torch.float32).unsqueeze(0) # add batch dim
+    S1_tensor = torch.tensor(S1_segment, dtype=torch.float32).unsqueeze(0) # shape: (1, N_MELS, F)
+    S2_tensor = torch.tensor(S2_segment, dtype=torch.float32).unsqueeze(0) # shape: (1, N_MELS, F)
+    S_truth_tensor = torch.tensor(S_truth_segment, dtype=torch.float32).unsqueeze(0) # shape: (1, N_MELS, F)
 
-    # Combine S1 and S2 as channels: (batch=1, 2, N_MELS, T)
+    # Combine S1 and S2 as channels: (batch=1, 2, N_MELS, F)
     input_tensor = torch.cat([S1_tensor, S2_tensor], dim=0).unsqueeze(0)
 
     return input_tensor, S_truth_tensor
@@ -212,7 +223,7 @@ def segment_melspectrogram(S, start, end, total_frames):
     n_mels, n_frames = S.shape
 
     if start < 0 and end > n_frames:
-        raise ValueError("Start frame is negative and end frame is greater than total frames.")
+        raise ValueError("Desired padded segment is longer than the track itself.")
 
     # This assumes that only one of these conditions is true, when in reality
     # it's possible for both to be true.
@@ -229,8 +240,8 @@ def segment_melspectrogram(S, start, end, total_frames):
         S_segment = S[:, start:end]
 
     # Ensure the segment has exactly total_frames frames
-    if S_segment.shape[1] < total_frames:
-        raise ValueError("Segment does not have enough frames.")
+    if S_segment.shape[1] != total_frames:
+        raise ValueError("Segment has wrong number of frames.")
     
     return S_segment
 
