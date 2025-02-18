@@ -3,11 +3,6 @@ import torch
 from torch.utils.data import Dataset
 
 
-SAMPLING_RATE = 22050       # Sampling rate for audio
-HOP_LENGTH = 512            # Hop length for STFT -> mel-spectrogram
-SEGMENT_DURATION = 15.0     # 15 seconds segment length
-
-
 class DJTransitionDataset(Dataset):
     def __init__(self, preprocessed_dir):
         self.preprocessed_dir = preprocessed_dir

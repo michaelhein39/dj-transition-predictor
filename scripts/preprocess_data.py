@@ -21,6 +21,7 @@ import os
 import torch
 import librosa
 import numpy as np
+import pandas as pd
 import lib.feature as ft
 
 
@@ -28,33 +29,41 @@ SAMPLING_RATE = 22050       # Sampling rate for audio
 HOP_LENGTH = 512            # Hop length for STFT -> mel-spectrogram
 SEGMENT_DURATION = 15.0     # 15 seconds segment length
 
-
-def preprocess_and_save(audio_data, cue_points, bpm_data, S_truth_data, sr, hop_length, segment_duration, save_dir):
-    """
-    Args:
-        audio_data (list of tuples): List of (S1_audio_signal, S2_audio_signal) tuples.
-        cue_points (list of tuples): List of (cue_out_time_s1, cue_in_time_s2) tuples.
-        bpm_data (list of tuples): List of (bpm_orig_s1, bpm_orig_s2, target_bpm) tuples.
-        S_truth_data (list): List of mel-spectrograms for the real DJ transitions.
-        sr (int): Sampling rate.
-        hop_length (int): Hop length for mel-spectrogram computation.
-        segment_duration (float): Duration of the segment to extract in seconds.
-        save_dir (str): Directory to save the processed data.
-    """
+def main(csv_file, save_dir):
     os.makedirs(save_dir, exist_ok=True)
-    for idx, (S1_audio_signal, S2_audio_signal) in enumerate(audio_data):
-        cue_out_time_s1, cue_in_time_s2 = cue_points[idx]
-        bpm_orig_s1, bpm_orig_s2, target_bpm = bpm_data[idx]
-        S_truth = S_truth_data[idx]
 
-        input_tensor, S_truth_tensor = create_input_and_label(S1_audio_signal, S2_audio_signal, S_truth,
-                                                              cue_out_time_s1, cue_in_time_s2,
-                                                              bpm_orig_s1, bpm_orig_s2, target_bpm,
-                                                              segment_duration, sr, hop_length)
+    df = pd.read_csv(csv_file)
+    for idx, row in df.iterrows():
+        S1_audio_path = row['path_S1']
+        S2_audio_path = row['path_S2']
+        mix_audio_path = row['mix_path']
+
+        cue_out_time_s1 = row['cue_out_time_s1']
+        cue_in_time_s2 = row['cue_in_time_s2']
+        cue_in_time_mix = row['cue_in_time_mix']
+        cue_out_time_mix = row['cue_out_time_mix']
+
+        bpm_orig_s1 = row['bpm_orig_s1']
+        bpm_orig_s2 = row['bpm_orig_s2']
+        bpm_target = row['bpm_target']
+
+        S1_audio_signal, _ = librosa.load(S1_audio_path, sr=SAMPLING_RATE)
+        S2_audio_signal, _ = librosa.load(S2_audio_path, sr=SAMPLING_RATE)
+        mix_audio_signal, _ = librosa.load(mix_audio_path, sr=SAMPLING_RATE)
+
+        # Create input and truth tensors
+        input_tensor, S_truth_tensor = create_input_and_label(
+            S1_audio_signal, S2_audio_signal, mix_audio_signal,
+            cue_out_time_s1, cue_in_time_s2,
+            cue_in_time_mix, cue_out_time_mix,
+            bpm_orig_s1, bpm_orig_s2, bpm_target
+        )
+        
+        # Save the processed data
         torch.save((input_tensor, S_truth_tensor), os.path.join(save_dir, f'sample_{idx}.pt'))
 
 
-def create_input_and_label(S1_audio_signal, S2_audio_signal, S_truth, 
+def create_input_and_label(S1_audio_signal, S2_audio_signal, mix_audio_signal, 
                                   cue_out_time_s1, cue_in_time_s2,
                                   bpm_orig_s1, bpm_orig_s2,
                                   bpm_target, segment_duration=SEGMENT_DURATION,
@@ -70,9 +79,11 @@ def create_input_and_label(S1_audio_signal, S2_audio_signal, S_truth,
     Args:
         S1_audio_signal: raw audio array for track 1
         S2_audio_signal: raw audio array for track 2
-        S_truth: mel-spectrogram for the real DJ transition
+        S_truth_audio_signal: raw audio array for the mix containing the real DJ transition
         cue_out_time_s1: the cue-out time (in seconds) for S1
         cue_in_time_s2: the cue-in time (in seconds) for S2
+        cue_in_time_mix: the cue-in time (in seconds) for the mix
+        cue_out_time_mix: the cue-out time (in seconds) for the mix
         bpm_orig_s1: original BPM of S1
         bpm_orig_s2: original BPM of S2
         bpm_target: target BPM for time stretching
@@ -92,6 +103,7 @@ def create_input_and_label(S1_audio_signal, S2_audio_signal, S_truth,
     # Convert to mel-spectrograms
     S1_mel = ft.audio_signal_melspectrogram(S1_stretched, sr)
     S2_mel = ft.audio_signal_melspectrogram(S2_stretched, sr)
+    S_truth_mel = ft.audio_signal_melspectrogram(S_mix_audio_signal, sr)
 
     # Compute frame indices of cue points after time stretching
     cue_out_frame_s1 = convert_beat_time_to_frame(cue_out_time_s1, bpm_orig_s1, bpm_target, sr, hop_length)
@@ -101,7 +113,7 @@ def create_input_and_label(S1_audio_signal, S2_audio_signal, S_truth,
     total_frames = compute_num_frames(segment_duration, sr, hop_length) 
     
     # Determine necessary padding
-    z_frames = S_truth.shape[1]  # original number of ground truth transition frames
+    z_frames = S_truth_mel.shape[1]  # original number of ground truth transition frames
     if z_frames < total_frames:
         # x and y split the remaining time
         remainder = total_frames - z_frames
@@ -126,7 +138,7 @@ def create_input_and_label(S1_audio_signal, S2_audio_signal, S_truth,
     # Convert all to torch tensors
     S1_tensor = torch.tensor(S1_segment, dtype=torch.float32).unsqueeze(0) # shape: (1, N_MELS, T)
     S2_tensor = torch.tensor(S2_segment, dtype=torch.float32).unsqueeze(0) # shape: (1, N_MELS, T)
-    S_truth_tensor = torch.tensor(S_truth, dtype=torch.float32).unsqueeze(0) # add batch dim
+    S_truth_tensor = torch.tensor(S_truth_mel, dtype=torch.float32).unsqueeze(0) # add batch dim
 
     # Combine S1 and S2 as channels: (batch=1, 2, N_MELS, T)
     input_tensor = torch.cat([S1_tensor, S2_tensor], dim=0).unsqueeze(0)
@@ -223,15 +235,11 @@ def segment_melspectrogram(S, start, end, total_frames):
     return S_segment
 
 
-# Example usage
 if __name__ == "__main__":
-    # Load your data here
-    audio_data = ...  # List of (S1_audio_signal, S2_audio_signal) tuples
-    cue_points = ...  # List of (cue_out_time_s1, cue_in_time_s2) tuples
-    bpm_data = ...  # List of (bpm_orig_s1, bpm_orig_s2, target_bpm) tuples
-    S_truth_data = ...  # List of mel-spectrograms for the real DJ transitions
-    sr = 22050
-    hop_length = 512
-    segment_duration = 15.0
+    # Path to the filtered CSV file
+    csv_file = 'data/filtered_input_output_pairs.csv'
 
-    preprocess_and_save(audio_data, cue_points, bpm_data, S_truth_data, sr, hop_length, segment_duration, 'data/processed')
+    # Directory to save the preprocessed data
+    save_dir = 'data/processed'
+
+    main(csv_file, save_dir)
