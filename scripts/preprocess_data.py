@@ -10,9 +10,9 @@ Assume you have:
 Steps:
     1) Time stretch S1 and S2 to target BPM
     2) Extract mel-spectrograms
-    3) Compute frame indices for cue points using beat_time_to_resampled_frame
+    3) Compute frame indices from cue points
     4) Extract 15-second segment around the transition
-    5) Prepare input batch and S_truth
+    5) Save input and label pairs
 
 """
 
