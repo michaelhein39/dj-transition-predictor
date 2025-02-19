@@ -1,5 +1,6 @@
 # Audio files
 *.wav
+*.mp3
 
 # Alignment data
 align/
