@@ -6,6 +6,7 @@ from joblib import Memory
 np.float = float
 np.int = int
 
+# Madmom is generally preferred over Librosa for beat tracking accuracy
 from madmom.features.beats import RNNBeatProcessor, BeatTrackingProcessor
 
 SAMPLING_RATE = 22050  # 44100 is the min in the trunc sample, but we use 22050
@@ -120,18 +121,10 @@ def beat_chroma_cens(path):
 
 def beat_aggregate(feature, beat_times_, frames_per_beat=None):
   """
-  Takes a feature of a song and "groups" it by beats so that there is a
+  Takes a feature of a song and aggregates it by beats so that there is a
   single value for each beat. This allows you to analyze the audio signal
-  in terms of beats rather than individual time stamps.
+  in terms of beats rather than individual frames.
   The output is an array of size (n_features, n_beats).
   """
-  max_frame = feature.shape[1]
-  beat_frames = librosa.time_to_frames(beat_times_)
-  beat_frames = beat_frames[beat_frames < max_frame]
-  beat_feature = np.split(feature, beat_frames, axis=1)
-
-  # Average for each beat.
-  beat_feature = beat_feature[1:-1]  # only use chroma features between beats. not before or after beat
-  beat_feature = [f.mean(axis=1) for f in beat_feature]  # average chroma features for each beat
-  beat_feature = np.array(beat_feature).T
-  return beat_feature
+  beat_frames = librosa.time_to_frames(beat_times_, sr=SAMPLING_RATE, hop_length=HOP_LENGTH)
+  return librosa.util.sync(feature, beat_frames, aggregate=np.mean)
