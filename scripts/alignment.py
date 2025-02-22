@@ -1,8 +1,10 @@
-import pandas as pd
 import os
+import librosa
+import numpy as np
+import pandas as pd
+import lib.feature as ft
+from src.cue import find_cue
 from collections import namedtuple
-from lib.feature import *
-from lib.cue import find_cue
 
 Case = namedtuple('Case', ['features', 'key_invariant'])
 CASES = [
@@ -43,7 +45,7 @@ def alignment(mix_id, features=['chroma', 'mfcc'], key_invariant=True):
 
     # Beat times
     # 1D vector
-    mix_beat_times = beat_times(mix_path)
+    mix_beat_times = ft.beat_times(mix_path)
 
     data = []
     for _, track in df_tlist_curr.iterrows():
@@ -100,7 +102,7 @@ def alignment(mix_id, features=['chroma', 'mfcc'], key_invariant=True):
                 best_wp = wp
 
         # Compute cue_points
-        track_beats = beat_times(track_path)
+        track_beats = ft.beat_times(track_path)
         mix_cue_in_beat, track_cue_in_beat = find_cue(best_wp, cue_in=True)
         mix_cue_out_beat, track_cue_out_beat = find_cue(best_wp, cue_in=False)
         mix_cue_in_time, track_cue_in_time = mix_beat_times[mix_cue_in_beat], track_beats[track_cue_in_beat]
@@ -158,9 +160,9 @@ def extract_feature(path, feature_names):
     for feature_name in feature_names:
         # Calculate the feature
         if feature_name == 'chroma':
-            f = beat_chroma_cens(path).astype('float32')
+            f = ft.beat_chroma_cens(path).astype('float32')
         elif feature_name == 'mfcc':
-            f = beat_mfcc(path).astype('float32')
+            f = ft.beat_mfcc(path).astype('float32')
         else:
             raise Exception(f'Unknown feature: {feature_name}')
         
