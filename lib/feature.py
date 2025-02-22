@@ -111,7 +111,24 @@ def beat_chroma_cens(path):
   return beat_chroma_cens_
 
 
-def beat_aggregate(feature, beat_times_, frames_per_beat=None):
+@memory.cache
+def chroma_cqt(path):
+  audio_signal, sr = librosa.load(path, sr=SAMPLING_RATE)
+  chroma_cqt_ = librosa.feature.chroma_cqt(y=audio_signal, sr=sr,
+                                           hop_length=HOP_LENGTH,
+                                           n_chroma=N_CHROMA)
+  return chroma_cqt_
+
+
+@memory.cache
+def beat_chroma_cqt(path):
+  beat_times_ = beat_times(path)
+  chroma_cqt_ = chroma_cqt(path)
+  beat_chroma_cqt_ = beat_aggregate(chroma_cqt_, beat_times_)
+  return beat_chroma_cqt_
+
+
+def beat_aggregate(feature, beat_times_):
   """
   Takes a feature of a song and aggregates it by beats so that there is a
   single value for each beat. This allows you to analyze the audio signal
