@@ -75,7 +75,7 @@ def train_model(model,
             S_pred = torch.cat(S_pred_list, dim=0)
 
             # Compute loss against ground truth
-            loss = melspectrogram_loss(S_pred, S_truth_tensor)
+            loss = l1_loss(S_pred, S_truth_tensor)
             
             # Backpropagation
             loss.backward()
@@ -95,14 +95,47 @@ def train_model(model,
 # Loss Functions
 ############################################################
 
-def melspectrogram_loss(S_pred, S_truth):
+def mse_loss(S_pred, S_truth):
     """
-    Define a loss function comparing predicted spectrogram to ground truth.
-    A simple L1 or L2 loss can be used initially.
+    MSE loss (L2) between predicted and ground truth mel-spectrograms.
     """
     loss_fn = nn.MSELoss()
     return loss_fn(S_pred, S_truth)
 
+
+def l1_loss(S_pred, S_truth):
+    """
+    L1 loss (Mean Absolute Error) between predicted and ground truth mel-spectrograms.
+    """
+    loss_fn = nn.L1Loss()
+    return loss_fn(S_pred, S_truth)
+
+
+def spectral_hybrid_loss(S_pred, S_truth, lambda_sc=0.1):
+    """
+    Combined loss: L1 loss plus spectral convergence loss.
+    
+    Spectral convergence loss is defined as the ratio of the Frobenius norm of 
+    the difference (S_truth - S_pred) to the Frobenius norm of S_truth.
+    
+    Args:
+        S_pred (Tensor): Predicted mel-spectrogram, shape (batch, N_MELS, T).
+        S_truth (Tensor): Ground truth mel-spectrogram, shape (batch, N_MELS, T).
+        lambda_sc (float): Weight for the spectral convergence term.
+        
+    Returns:
+        Tensor: The combined loss.
+    """
+    # L1 loss (Mean Absolute Error)
+    l1_loss = nn.L1Loss()(S_pred, S_truth)
+    
+    # Spectral convergence loss
+    # Compute the Frobenius norm (over the mel and time dimensions) for each example.
+    diff_norm = torch.norm(S_truth - S_pred, p='fro', dim=[1, 2])
+    truth_norm = torch.norm(S_truth, p='fro', dim=[1, 2])
+    spectral_conv_loss = torch.mean(diff_norm / truth_norm)
+    
+    return l1_loss + lambda_sc * spectral_conv_loss
 
 ############################################################
 # Masking Functions
