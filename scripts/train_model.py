@@ -21,7 +21,7 @@ def main():
 
     # Train the model
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    train_model(model, train_loader, optimizer, epochs=10, device=device)
+    train_model(model, train_loader, optimizer, epochs=10, device=device, save_dir='models')
 
 if __name__ == '__main__':
     main()
