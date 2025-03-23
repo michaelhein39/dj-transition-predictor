@@ -7,7 +7,7 @@ from lib.constants import *
 np.float = float
 np.int = int
 # Madmom is generally preferred over Librosa for beat tracking accuracy
-from madmom.features.beats import RNNBeatProcessor, BeatTrackingProcessor
+from madmom.features.beats import RNNBeatProcessor, BeatTrackingProcessor, DBNBeatTrackingProcessor
 
 memory = Memory('./cache', verbose=1)
 
@@ -26,7 +26,7 @@ def beat_activations(path):
 @memory.cache
 def beat_times(path, fps=FPS):
   """
-  BeatTrackingProcessor predicts the beat locations in an audio signal.
+  DBNBeatTrackingProcessor predicts the beat locations in an audio signal.
   The output is an array of the time stamps (in seconds) of each beat.
 
   fps: frames per second
@@ -34,7 +34,8 @@ def beat_times(path, fps=FPS):
   computational cost.
   """
   beat_activations_ = beat_activations(path)
-  beat_processor = BeatTrackingProcessor(fps=fps)
+  # beat_processor = BeatTrackingProcessor(fps=fps)
+  beat_processor = DBNBeatTrackingProcessor(fps=fps)
   beat_times_ = beat_processor(beat_activations_)
   return beat_times_
 
