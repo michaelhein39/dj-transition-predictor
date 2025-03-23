@@ -5,6 +5,12 @@ from collections import namedtuple
 from lib.feature import *
 from lib.constants import *
 
+# Monkey patch np.float and np.int (used in Madmom)
+np.float = float
+np.int = int
+# Madmom is generally preferred over Librosa for beat tracking accuracy
+from madmom.features.beats import RNNBeatProcessor, DBNBeatTrackingProcessor
+
 Case = namedtuple('Case', ['features', 'key_invariant'])
 CASES = [
   Case(features=['mfcc'], key_invariant=False),
@@ -45,7 +51,7 @@ def main():
 
 
 def segmentation(mix_id):
-  result_path = f'data/segment/{mix_id}.pkl'
+  result_path = f'data/segment/{mix_id}.csv'
   if os.path.isfile(result_path):
     print(f'=> Skip processing: {result_path}')
     return pd.read_pickle(result_path)
@@ -83,11 +89,17 @@ def segmentation(mix_id):
     path_S1 = f'data/track/{row['filename_prev']}.wav'
     path_S2 = f'data/track/{row['filename_next']}.wav'
 
-    cue_out_beat_mix = row['mix_cue_out_beat_prev']
-    cue_in_beat_mix = row['mix_cue_in_beat_next']
+    cue_out_beat_mix = row['mix_cue_out_beat_prev']  # Beginning of transition region
+    cue_in_beat_mix = row['mix_cue_in_beat_next']  # End of transition region
 
-    cue_out_time_mix = mix_beat_times[cue_out_beat_mix]
-    cue_in_time_mix = mix_beat_times[cue_in_beat_mix]
+    cue_out_time_mix = mix_beat_times[cue_out_beat_mix]  # Beginning of transition region
+    cue_in_time_mix = mix_beat_times[cue_in_beat_mix]  # End of transition region
+
+    bpm_orig_S1 = calculate_bpm(path_S1)
+    bpm_orig_S2 = calculate_bpm(path_S2)
+    bpm_target = calculate_bpm(mix_path,
+                               start_time=cue_out_time_mix,
+                               end_time=cue_in_time_mix)
 
     result = {
               'mix_id': mix_id,
@@ -106,7 +118,7 @@ def segmentation(mix_id):
               'bpm_orig_S1': bpm_orig_S1,
               'bpm_orig_S2': bpm_orig_S2,
               'bpm_target': bpm_target
-          }
+              }
     results.append(result)
 
   # Convert results to DataFrame
@@ -120,10 +132,31 @@ def segmentation(mix_id):
   return df_results
 
 
-def calculate_bpm(audio_path):
-    y, _ = librosa.load(audio_path, sr=SAMPLING_RATE)
-    tempo, _ = librosa.beat.beat_track(y, sr=SAMPLING_RATE)
+def calculate_bpm(audio_path, sr=SAMPLING_RATE):
+    y, _ = librosa.load(audio_path, sr=sr)
+    tempo, _ = librosa.beat.beat_track(y, sr=sr)
     return tempo
+
+
+def calculate_bpm(audio_path, start_time=None, end_time=None, sr=SAMPLING_RATE):
+    beat_processor = RNNBeatProcessor()
+    beattracking_processor = DBNBeatTrackingProcessor(fps=FPS)
+    
+    # Load the audio and extract the segment
+    if start_time is not None and end_time is not None:
+      y, _ = librosa.load(audio_path, sr=sr, offset=start_time, duration=(end_time - start_time))
+    else:
+      y, _ = librosa.load(audio_path, sr=sr)
+    
+    beat_activations = beat_processor(y)
+    beat_times = beattracking_processor(beat_activations)
+    
+    if len(beat_times) > 1:
+        intervals = np.diff(beat_times)
+        bpm = 60.0 / np.mean(intervals)
+    else:
+        print(f'=> ERROR: bad segment')
+    return bpm
 
 
 if __name__ == '__main__':
