@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 
@@ -5,7 +6,8 @@ def train_model(model,
                 train_loader, 
                 optimizer, 
                 epochs=10, 
-                device='cpu'):
+                device='cpu',
+                save_dir='models'):
     """
     Train the TransitionPredictor model using spectrogram masking and an MSE loss.
     This version expects the DataLoader to yield only (input_tensor, S_truth_tensor),
@@ -29,6 +31,9 @@ def train_model(model,
     # Move model to the specified device (GPU or CPU)
     model.to(device)
     model.train()
+
+    # Ensure save directory exists
+    os.makedirs(save_dir, exist_ok=True)
 
     # Loop over epochs
     for epoch in range(epochs):
@@ -90,6 +95,17 @@ def train_model(model,
         # Print average loss for this epoch
         avg_loss = epoch_loss / num_batches if num_batches > 0 else 0.0
         print(f"Epoch [{epoch+1}/{epochs}], Loss: {avg_loss:.6f}")
+
+        # Save model checkpoint
+        checkpoint_path = os.path.join(save_dir, f'model_epoch_{epoch+1}.pth')
+        torch.save(model.state_dict(), checkpoint_path)
+        print(f"Model checkpoint saved at {checkpoint_path}")
+
+    # Save final model
+    final_model_path = os.path.join(save_dir, 'model_final.pth')
+    torch.save(model.state_dict(), final_model_path)
+    print(f"Final model saved at {final_model_path}")
+
 
 ############################################################
 # Loss Functions
