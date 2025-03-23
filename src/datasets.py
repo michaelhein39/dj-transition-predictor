@@ -42,3 +42,34 @@ class DJTransitionDataset(Dataset):
             raise RuntimeError(f"Error loading file {file_path}: {e}")
 
         return input_tensor, S_truth_tensor
+
+
+# Use this for single sample training to demonstrate the model
+class SingleSampleDataset(Dataset):
+    def __init__(self, preprocessed_dir, n_repeats=1000):
+        """
+        Args:
+            preprocessed_dir (str): Directory with the single preprocessed .pt file.
+            n_repeats (int): Number of times to repeat the sample.
+        """
+        self.file_list = [os.path.join(self.preprocessed_dir, fname)
+                          for fname in os.listdir(self.preprocessed_dir) if fname.endswith('.pt')]
+
+        if not self.file_list:
+            raise ValueError(f"No preprocessed files found in directory: {self.preprocessed_dir}")
+
+        if len(self.file_list) > 1:
+            raise ValueError(f"Multiple files found in directory: {self.preprocessed_dir}")
+
+        self.n_repeats = n_repeats
+
+    def __len__(self):
+        return self.n_repeats
+
+    def __getitem__(self, idx):
+        file_path = self.file_list[0]
+        try:
+            input_tensor, S_truth_tensor = torch.load(file_path)
+        except Exception as e:
+            raise RuntimeError(f"Error loading file {file_path}: {e}")
+        return input_tensor, S_truth_tensor
