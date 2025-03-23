@@ -39,13 +39,13 @@ def main(csv_file, save_dir, overwrite=False):
         S2_audio_path = row['path_S2']
         mix_audio_path = row['mix_path']
 
-        cue_out_time_s1 = row['cue_out_time_s1']
-        cue_in_time_s2 = row['cue_in_time_s2']
+        cue_out_time_S1 = row['cue_out_time_S1']
+        cue_in_time_S2 = row['cue_in_time_S2']
         cue_in_time_mix = row['cue_in_time_mix']
         cue_out_time_mix = row['cue_out_time_mix']
 
-        bpm_orig_s1 = row['bpm_orig_s1']
-        bpm_orig_s2 = row['bpm_orig_s2']
+        bpm_orig_S1 = row['bpm_orig_S1']
+        bpm_orig_S2 = row['bpm_orig_S2']
         bpm_target = row['bpm_target']
 
         # Skip if file already exists and overwrite is not enabled
@@ -62,9 +62,9 @@ def main(csv_file, save_dir, overwrite=False):
         # Create input and truth tensors
         input_tensor, S_truth_tensor = generate_training_tensors(
             S1_audio_signal, S2_audio_signal, mix_audio_signal,
-            cue_out_time_s1, cue_in_time_s2,
+            cue_out_time_S1, cue_in_time_S2,
             cue_in_time_mix, cue_out_time_mix,
-            bpm_orig_s1, bpm_orig_s2, bpm_target
+            bpm_orig_S1, bpm_orig_S2, bpm_target
         )
         
         # Save the processed data
