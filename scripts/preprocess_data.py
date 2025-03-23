@@ -41,8 +41,8 @@ def main(csv_file, save_dir, overwrite=False):
 
         cue_out_time_S1 = row['cue_out_time_S1']
         cue_in_time_S2 = row['cue_in_time_S2']
-        cue_in_time_mix = row['cue_in_time_mix']
         cue_out_time_mix = row['cue_out_time_mix']
+        cue_in_time_mix = row['cue_in_time_mix']
 
         bpm_orig_S1 = row['bpm_orig_S1']
         bpm_orig_S2 = row['bpm_orig_S2']
@@ -63,7 +63,7 @@ def main(csv_file, save_dir, overwrite=False):
         input_tensor, S_truth_tensor = generate_training_tensors(
             S1_audio_signal, S2_audio_signal, mix_audio_signal,
             cue_out_time_S1, cue_in_time_S2,
-            cue_in_time_mix, cue_out_time_mix,
+            cue_out_time_mix, cue_in_time_mix,
             bpm_orig_S1, bpm_orig_S2, bpm_target
         )
         
@@ -73,7 +73,7 @@ def main(csv_file, save_dir, overwrite=False):
 
 def generate_training_tensors(S1_audio_signal, S2_audio_signal, mix_audio_signal, 
                               cue_out_time_s1, cue_in_time_s2,
-                              cue_in_time_mix, cue_out_time_mix,
+                              cue_out_time_mix, cue_in_time_mix,
                               bpm_orig_s1, bpm_orig_s2,
                               bpm_target, segment_duration=SEGMENT_DURATION,
                               sr=SAMPLING_RATE, hop_length=HOP_LENGTH):
@@ -91,8 +91,8 @@ def generate_training_tensors(S1_audio_signal, S2_audio_signal, mix_audio_signal
         mix_audio_signal: raw audio array for the mix containing the real DJ transition
         cue_out_time_s1: the cue-out time (in seconds) for S1
         cue_in_time_s2: the cue-in time (in seconds) for S2
-        cue_in_time_mix: the cue-in time (in seconds) for the mix
-        cue_out_time_mix: the cue-out time (in seconds) for the mix
+        cue_out_time_mix: the cue-out time (in seconds) for the mix (beginning of transition)
+        cue_in_time_mix: the cue-in time (in seconds) for the mix (end of transition)
         bpm_orig_s1: original BPM of S1
         bpm_orig_s2: original BPM of S2
         bpm_target: target BPM (from the mix) for time stretching
@@ -117,11 +117,11 @@ def generate_training_tensors(S1_audio_signal, S2_audio_signal, mix_audio_signal
     # Compute frame indices of cue points after time stretching
     cue_out_frame_s1 = convert_beat_time_to_frame(cue_out_time_s1, bpm_orig_s1, bpm_target, sr, hop_length)
     cue_in_frame_s2 = convert_beat_time_to_frame(cue_in_time_s2, bpm_orig_s2, bpm_target, sr, hop_length)
-    cue_in_frame_mix = convert_beat_time_to_frame(cue_in_time_mix, bpm_target, bpm_target, sr, hop_length)
     cue_out_frame_mix = convert_beat_time_to_frame(cue_out_time_mix, bpm_target, bpm_target, sr, hop_length)
+    cue_in_frame_mix = convert_beat_time_to_frame(cue_in_time_mix, bpm_target, bpm_target, sr, hop_length)
 
     # Original number of ground truth transition frames
-    z_frames = cue_out_frame_mix - cue_in_frame_mix + 1
+    z_frames = cue_in_frame_mix - cue_out_frame_mix + 1
 
     # Number of frames corresponding to segment_duration seconds
     total_frames = compute_num_frames(segment_duration, sr, hop_length)
@@ -145,8 +145,8 @@ def generate_training_tensors(S1_audio_signal, S2_audio_signal, mix_audio_signal
     start_s2 = cue_in_frame_s2 - (total_frames - y_frames)
     end_s2 = start_s2 + total_frames
 
-    start_mix = cue_in_frame_mix - x_frames
-    end_mix = cue_out_frame_mix + y_frames + 1
+    start_mix = cue_out_frame_mix - x_frames
+    end_mix = cue_in_frame_mix + y_frames + 1
     if end_mix - start_mix != total_frames:
         raise ValueError("Padding issue")
 
