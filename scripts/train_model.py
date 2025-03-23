@@ -1,9 +1,9 @@
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from model import TransitionPredictor
-from train import train_model
-from datasets import DJTransitionDataset
+from src.models import TransitionPredictor
+from src.train import train_model
+from src.datasets import DJTransitionDataset
 
 def main():
     # Initialize model
@@ -13,7 +13,7 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=0.001)  # Adjust learning rate as needed
 
     # Dataset and DataLoader
-    preprocessed_dir = 'data/preprocessed'  # Adjust the path as necessary
+    preprocessed_dir = 'data/preprocessed'
     dataset = DJTransitionDataset(preprocessed_dir)
     train_loader = DataLoader(dataset, batch_size=32, shuffle=True, drop_last=True)  # Adjust batch_size as needed
 

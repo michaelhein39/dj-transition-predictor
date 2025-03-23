@@ -259,6 +259,6 @@ if __name__ == "__main__":
     csv_file = 'data/filtered_input_output_pairs.csv'
 
     # Directory to save the preprocessed data
-    save_dir = 'data/processed'
+    save_dir = 'data/preprocessed'
 
     main(csv_file, save_dir, overwrite=False)
