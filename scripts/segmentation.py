@@ -86,8 +86,8 @@ def segmentation(mix_id):
       print(f'=> ERROR 2: {mix_id}')
       continue
 
-    path_S1 = f'data/track/{row['filename_prev']}.wav'
-    path_S2 = f'data/track/{row['filename_next']}.wav'
+    path_S1 = f"data/track/{row['filename_prev']}.wav"
+    path_S2 = f"data/track/{row['filename_next']}.wav"
 
     cue_out_beat_mix = row['mix_cue_out_beat_prev']  # Beginning of transition region
     cue_in_beat_mix = row['mix_cue_in_beat_next']  # End of transition region
