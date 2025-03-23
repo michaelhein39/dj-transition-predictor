@@ -67,68 +67,57 @@ def segmentation(mix_id):
   mix_path = f'data/mix/{mix_id}.wav'
   mix_beat_times = beat_times(mix_path)
 
+  results = []
   for idx, row in df.iterrows():
-    if (row.wp_prev[-1, 0] != 0) or (row.wp_next[-1, 0] != 0):
+    if (row['wp_prev'][-1, 0] != 0) or (row['wp_next'][-1, 0] != 0):
       # Some weird warping path results...
       # I guess the tracks are too long so they are considered as the longer sequence?
       print(f'=> ERROR 1: {mix_id}')
       continue
 
-    if (row.wp_prev.max() > len(mix_beat_times)) or (row.wp_next.max() > len(mix_beat_times)):
+    if (row['wp_prev'].max() > len(mix_beat_times)) or (row['wp_next'].max() > len(mix_beat_times)):
       # Beats in the warp path should not be greater than the number of beats in the mix
       print(f'=> ERROR 2: {mix_id}')
       continue
 
-    cue_out_beat_mix = row.mix_cue_out_beat_prev
-    cue_in_beat_mix = row.mix_cue_in_beat_next
+    path_S1 = f'data/track/{row['filename_prev']}.wav'
+    path_S2 = f'data/track/{row['filename_next']}.wav'
+
+    cue_out_beat_mix = row['mix_cue_out_beat_prev']
+    cue_in_beat_mix = row['mix_cue_in_beat_next']
 
     cue_out_time_mix = mix_beat_times[cue_out_beat_mix]
     cue_in_time_mix = mix_beat_times[cue_in_beat_mix]
 
-  df = df[['case', 'i_track_prev', 'i_track_next', 'track_id_prev', 'track_id_next',
-           'match_rate_prev', 'match_rate_next',
-           'mix_cue_out_time', 'mix_cue_in_time', 'mix_cue_mid_time',
-           'mix_cue_out_beat', 'mix_cue_in_beat', 'mix_cue_mid_beat',
-           'track_cue_in_time_prev', 'track_cue_out_time_prev',
-           'track_cue_in_time_next', 'track_cue_out_time_next',
-           'track_cue_in_beat_prev', 'track_cue_out_beat_prev',
-           'track_cue_in_beat_next', 'track_cue_out_beat_next',
-           'key_change_prev', 'key_change_next',
-           'wp_prev', 'wp_next',
-           ]]
-  df['mix_id'] = mix_id
+    result = {
+              'mix_id': mix_id,
+              'case': row['case'],
+              'i_track_S1': row['i_track_prev'],
+              'i_track_S2': row['i_track_next'],
+              'track_id_S1': row['track_id_prev'],
+              'track_id_S2': row['track_id_next'],
+              'cue_out_time_S1': row['track_cue_out_time_prev'],
+              'cue_in_time_S2': row['track_cue_in_time_next'],
+              'path_S1': path_S1,
+              'path_S2': path_S2,
+              'mix_path': mix_path,
+              'cue_out_time_mix': cue_out_time_mix,
+              'cue_in_time_mix': cue_in_time_mix,
+              'bpm_orig_S1': bpm_orig_S1,
+              'bpm_orig_S2': bpm_orig_S2,
+              'bpm_target': bpm_target
+          }
+    results.append(result)
 
-  result = {
-            'case': row['case'],
-            'i_track_S1': row['i_track_prev'],
-            'i_track_S2': row['i_track_next'],
-            'track_id_S1': row['track_id_prev'],
-            'track_id_S2': row['track_id_next'],
-            'match_rate_S1': row['match_rate_prev'],
-            'match_rate_S2': row['match_rate_next'],
-            'track_cue_in_time_prev': row['track_cue_in_time_prev'],
-            'cue_out_time_S1': row['track_cue_out_time_prev'],
-            'cue_in_time_S2': row['track_cue_in_time_next'],
-            'track_cue_out_time_next': row['track_cue_out_time_next'],
-            'path_S1': path_S1,
-            'path_S2': path_S2,
-            'mix_path': mix_path,
-            'cue_out_time_mix': mix_cue_in_time,
-            'cue_in_time_mix': mix_cue_out_time,
-            'bpm_orig_S1': bpm_orig_S1,
-            'bpm_orig_S2': bpm_orig_S2,
-            'bpm_target': bpm_target
-        }
   # Convert results to DataFrame
-  df = pd.DataFrame(result)
+  df_results = pd.DataFrame(results)
 
-  # Each row of df is a transition between two tracks.
-  # The columns include the cue in and cue out for each track as calculated
-  # in alignment.py, as well as the cue points based on tracklist timestamp metadata.
+  # Each row of df_results is a transition between two tracks.
+  # The columns include the cue in and cue out for each track as calculated in alignment.py
 
-  df.to_pickle(result_path)
+  df_results.to_csv(result_path)
   print(f'=> Saved: {result_path}')
-  return df
+  return df_results
 
 
 def calculate_bpm(audio_path):
