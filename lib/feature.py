@@ -6,25 +6,30 @@ from lib.constants import *
 # Monkey patch np.float and np.int (used in Madmom)
 np.float = float
 np.int = int
+
 # Madmom is generally preferred over Librosa for beat tracking accuracy
+# DBNBeatTrackingProcessor is generally preferred over BeatTrackingProcessor
 from madmom.features.beats import RNNBeatProcessor, BeatTrackingProcessor, DBNBeatTrackingProcessor
 
 memory = Memory('./cache', verbose=1)
 
 @memory.cache
-def beat_activations(path):
+def beat_activations(path, start_time=None, end_time=None, sr=SAMPLING_RATE):
   """
   RNNBeatProcessor predicts the beat locations in an audio signal.
   The output are the activations, which are the probabilities of each frame
   being a beat (100 frames per second).
   """
   beat_processor = RNNBeatProcessor()
-  beat_activations_ = beat_processor(path)
-  return beat_activations_
+  if start_time is not None and end_time is not None:
+    y, _ = librosa.load(path, sr=sr, offset=start_time, duration=(end_time - start_time))
+    return beat_processor(y)
+  else:
+    return beat_processor(path)
 
 
 @memory.cache
-def beat_times(path, fps=FPS):
+def beat_times(path, start_time=None, end_time=None, sr=SAMPLING_RATE, fps=FPS):
   """
   DBNBeatTrackingProcessor predicts the beat locations in an audio signal.
   The output is an array of the time stamps (in seconds) of each beat.
@@ -33,11 +38,9 @@ def beat_times(path, fps=FPS):
   A higher fps will result in more precise beat tracking, but at a higher
   computational cost.
   """
-  beat_activations_ = beat_activations(path)
-  # beat_processor = BeatTrackingProcessor(fps=fps)
-  beat_processor = DBNBeatTrackingProcessor(fps=fps)
-  beat_times_ = beat_processor(beat_activations_)
-  return beat_times_
+  beat_activations_ = beat_activations(path, start_time=start_time, end_time=end_time, sr=sr)
+  beattracking_processor = DBNBeatTrackingProcessor(fps=fps)
+  return beattracking_processor(beat_activations_)
 
 
 def melspectrogram(path):
