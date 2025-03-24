@@ -5,12 +5,6 @@ from collections import namedtuple
 from lib.feature import *
 from lib.constants import *
 
-# Monkey patch np.float and np.int (used in Madmom)
-np.float = float
-np.int = int
-# Madmom is generally preferred over Librosa for beat tracking accuracy
-from madmom.features.beats import RNNBeatProcessor, DBNBeatTrackingProcessor
-
 Case = namedtuple('Case', ['features', 'key_invariant'])
 CASES = [
     Case(features=['mfcc'], key_invariant=False),
@@ -23,7 +17,7 @@ CASES = [
 df_tlist = pd.read_csv('data/meta/tracks_trunc.csv')
 df_mlist = pd.read_csv('data/meta/mixes_trunc.csv')
 
-df_align = pd.concat([pd.read_pickle(p) for p in glob('data/align/*.pkl')]).set_index('mix_id')
+df_align = pd.concat([pd.read_pickle(p) for p in glob('data/align/*-chroma-key_invariant.pkl')]).set_index('mix_id')
 df_align['case'] = df_align.feature
 df_align.loc[df_align.key_invariant, 'case'] += '-keyinv'
 
@@ -46,7 +40,7 @@ def main():
         result = segmentation(mix.mix_id)
         data.append(result)
     df = pd.concat(data, ignore_index=True)
-    df.to_pickle('data/segment/all_mix_segmentation.pkl')  # Overwrites existing file
+    df.to_csv('data/segment/all_mix_segmentation.csv')  # Overwrites existing file
 
 
 
@@ -54,7 +48,7 @@ def segmentation(mix_id):
     result_path = f'data/segment/{mix_id}.csv'
     if os.path.isfile(result_path):
         print(f'=> Skip processing: {result_path}')
-        return pd.read_pickle(result_path)
+        return pd.read_csv(result_path)
 
     df_mix_trans = df_trans
     df_mix_align = df_align
@@ -65,6 +59,11 @@ def segmentation(mix_id):
     df_mix_align_next.columns = df_mix_align_next.columns + '_next'
     df_mix_align_next = df_mix_align_next.rename(columns={'case_next': 'case'})
     df = df_mix_trans.merge(df_mix_align_prev).merge(df_mix_align_next)
+
+    # print(df[['case', #'i_track_prev', 'i_track_next',
+    #           'mix_cue_in_time_prev', 'mix_cue_out_time_prev',
+    #           'mix_cue_in_time_next', 'mix_cue_out_time_next']])
+    # exit()
 
     # Each row of df represents a transition between two tracks.
     # It has columns pertaining to the tracklist info of each track, as well as
@@ -124,6 +123,8 @@ def segmentation(mix_id):
                 'bpm_target': bpm_target
                 }
         results.append(result)
+
+        break
 
     # Convert results to DataFrame
     df_results = pd.DataFrame(results)
