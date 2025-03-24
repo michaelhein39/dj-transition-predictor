@@ -136,12 +136,6 @@ def segmentation(mix_id):
     return df_results
 
 
-def calculate_bpm(audio_path, sr=SAMPLING_RATE):
-    y, _ = librosa.load(audio_path, sr=sr)
-    tempo, _ = librosa.beat.beat_track(y, sr=sr)
-    return tempo
-
-
 def calculate_bpm(audio_path, start_time=None, end_time=None, sr=SAMPLING_RATE):
     print(2)
     beat_times_ = beat_times(audio_path, start_time=start_time, end_time=end_time, sr=sr)
