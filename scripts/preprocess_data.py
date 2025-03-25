@@ -98,8 +98,8 @@ def generate_training_tensors(S1_audio_signal, S2_audio_signal, mix_audio_signal
         hop_length: hop length for mel-spectrogram computation
 
     Returns:
-        input_tensor: torch tensor of shape (batch=1, 2, N_MELS, F)
-        S_truth_tensor: torch tensor of shape (batch=1, N_MELS, F)
+        input_tensor: torch tensor of shape (2, N_MELS, F)
+        S_truth_tensor: torch tensor of shape (N_MELS, F)
     """
 
     # Time stretch S1 and S2 to target BPM
@@ -154,10 +154,10 @@ def generate_training_tensors(S1_audio_signal, S2_audio_signal, mix_audio_signal
     # Convert all to torch tensors
     S1_tensor = torch.tensor(S1_segment, dtype=torch.float32).unsqueeze(0) # shape: (1, N_MELS, F)
     S2_tensor = torch.tensor(S2_segment, dtype=torch.float32).unsqueeze(0) # shape: (1, N_MELS, F)
-    S_truth_tensor = torch.tensor(S_truth_segment, dtype=torch.float32).unsqueeze(0) # shape: (1, N_MELS, F)
+    S_truth_tensor = torch.tensor(S_truth_segment, dtype=torch.float32) # shape: (N_MELS, F)
 
-    # Combine S1 and S2 as channels: (batch=1, 2, N_MELS, F)
-    input_tensor = torch.cat([S1_tensor, S2_tensor], dim=0).unsqueeze(0)
+    # Combine S1 and S2 as channels: (2, N_MELS, F)
+    input_tensor = torch.cat([S1_tensor, S2_tensor], dim=0)
 
     return input_tensor, S_truth_tensor
 
