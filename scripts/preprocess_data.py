@@ -52,23 +52,19 @@ def main(csv_file, save_dir, overwrite=False):
             print(f"Skipping {file_name}, already exists.")
             continue
 
-        S1_audio_signal, _ = librosa.load(S1_audio_path, sr=SAMPLING_RATE)
-        S2_audio_signal, _ = librosa.load(S2_audio_path, sr=SAMPLING_RATE)
-        mix_audio_signal, _ = librosa.load(mix_audio_path, sr=SAMPLING_RATE)
-
         # Create input and truth tensors
-        input_tensor, S_truth_tensor = generate_training_tensors(
-            S1_audio_signal, S2_audio_signal, mix_audio_signal,
+        input_tensor, S_truth_tensor, phases = generate_training_tensors(
+            S1_audio_path, S2_audio_path, mix_audio_path,
             cue_out_time_S1, cue_in_time_S2,
             cue_out_time_mix, cue_in_time_mix,
             bpm_orig_S1, bpm_orig_S2, bpm_target
         )
         
         # Save the processed data
-        torch.save((input_tensor, S_truth_tensor), file_path)
+        torch.save((input_tensor, S_truth_tensor, phases), file_path)
 
 
-def generate_training_tensors(S1_audio_signal, S2_audio_signal, mix_audio_signal, 
+def generate_training_tensors(S1_audio_path, S2_audio_path, mix_audio_path, 
                               cue_out_time_s1, cue_in_time_s2,
                               cue_out_time_mix, cue_in_time_mix,
                               bpm_orig_s1, bpm_orig_s2,
@@ -83,9 +79,9 @@ def generate_training_tensors(S1_audio_signal, S2_audio_signal, mix_audio_signal
     Finally, convert all to torch tensors and combine the two segments as channels.
 
     Args:
-        S1_audio_signal: raw audio array for track 1
-        S2_audio_signal: raw audio array for track 2
-        mix_audio_signal: raw audio array for the mix containing the real DJ transition
+        S1_audio_path: file path for track 1
+        S2_audio_path: file path for track 2
+        mix_audio_path: file path for the mix containing the real DJ transition
         cue_out_time_s1: the cue-out time (in seconds) for S1
         cue_in_time_s2: the cue-in time (in seconds) for S2
         cue_out_time_mix: the cue-out time (in seconds) for the mix (beginning of transition)
@@ -102,9 +98,19 @@ def generate_training_tensors(S1_audio_signal, S2_audio_signal, mix_audio_signal
         S_truth_tensor: torch tensor of shape (N_MELS, F)
     """
 
+    # Load audio signals
+    S1_audio_signal, _ = librosa.load(S1_audio_path, sr=sr)
+    S2_audio_signal, _ = librosa.load(S2_audio_path, sr=sr)
+    mix_audio_signal, _ = librosa.load(mix_audio_path, sr=sr)
+
     # Time stretch S1 and S2 to target BPM
     S1_stretched = adjust_bpm(S1_audio_signal, bpm_orig_s1, bpm_target)
     S2_stretched = adjust_bpm(S2_audio_signal, bpm_orig_s2, bpm_target)
+
+    # Compute STFTs for phase extraction
+    _, _, S1_phase = ft.audio_signal_stft(S1_stretched)
+    _, _, S2_phase = ft.audio_signal_stft(S2_stretched)
+    _, _, mix_phase = ft.audio_signal_stft(mix_audio_signal)
 
     # Convert to mel-spectrograms
     S1_mel = ft.audio_signal_melspectrogram(S1_stretched, sr)
@@ -147,9 +153,15 @@ def generate_training_tensors(S1_audio_signal, S2_audio_signal, mix_audio_signal
     if end_mix - start_mix != total_frames:
         raise ValueError("Padding issue")
 
+    # Extract melspectrogram segments
     S1_segment = segment_melspectrogram(S1_mel, start_s1, end_s1, total_frames)
     S2_segment = segment_melspectrogram(S2_mel, start_s2, end_s2, total_frames)
     S_truth_segment = segment_melspectrogram(mix_mel, start_mix, end_mix, total_frames)
+
+    # Extract corresponding phase segments
+    S1_phase_segment = segment_melspectrogram(S1_phase, start_s1, end_s1, total_frames)
+    S2_phase_segment = segment_melspectrogram(S2_phase, start_s2, end_s2, total_frames)
+    S_truth_phase_segment = segment_melspectrogram(mix_phase, start_mix, end_mix, total_frames)
 
     # Convert all to torch tensors
     S1_tensor = torch.tensor(S1_segment, dtype=torch.float32).unsqueeze(0) # shape: (1, N_MELS, F)
@@ -159,7 +171,14 @@ def generate_training_tensors(S1_audio_signal, S2_audio_signal, mix_audio_signal
     # Combine S1 and S2 as channels: (2, N_MELS, F)
     input_tensor = torch.cat([S1_tensor, S2_tensor], dim=0)
 
-    return input_tensor, S_truth_tensor
+    # Save phase information in a dictionary
+    phases = {
+        'S1_phase': S1_phase_segment,
+        'S2_phase': S2_phase_segment,
+        'S_truth_phase': S_truth_phase_segment
+    }
+
+    return input_tensor, S_truth_tensor, phases
 
 
 def adjust_bpm(audio_signal, bpm_orig, bpm_target):
