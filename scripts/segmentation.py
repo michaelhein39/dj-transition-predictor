@@ -40,7 +40,7 @@ def main():
         result = segmentation(mix.mix_id)
         data.append(result)
     df = pd.concat(data, ignore_index=True)
-    df.to_csv('data/segment/all_mix_segmentation.csv')  # Overwrites existing file
+    df.to_csv('data/segment/all_mix_segmentation.csv', index=False)  # Overwrites existing file
 
 
 
@@ -111,11 +111,11 @@ def segmentation(mix_id):
                 'i_track_S2': row['i_track_next'],
                 'track_id_S1': row['track_id_prev'],
                 'track_id_S2': row['track_id_next'],
-                'cue_out_time_S1': row['track_cue_out_time_prev'],
-                'cue_in_time_S2': row['track_cue_in_time_next'],
                 'path_S1': path_S1,
                 'path_S2': path_S2,
                 'mix_path': mix_path,
+                'cue_out_time_S1': row['track_cue_out_time_prev'],
+                'cue_in_time_S2': row['track_cue_in_time_next'],
                 'cue_out_time_mix': cue_out_time_mix,
                 'cue_in_time_mix': cue_in_time_mix,
                 'bpm_orig_S1': bpm_orig_S1,
@@ -132,7 +132,7 @@ def segmentation(mix_id):
     # Each row of df_results is a transition between two tracks.
     # The columns include the cue in and cue out for each track as calculated in alignment.py
 
-    df_results.to_csv(result_path)
+    df_results.to_csv(result_path, index=False)
     print(f'=> Saved: {result_path}')
     return df_results
 
