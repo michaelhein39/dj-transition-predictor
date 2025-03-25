@@ -37,11 +37,13 @@ def train_model(model,
 
     # Loop over epochs
     for epoch in range(epochs):
+        print(f'EPOCH {epoch+1}')
         epoch_loss = 0.0
         num_batches = 0
         
         # Iterate over batches from the train_loader
         for batch_idx, batch_data in enumerate(train_loader):
+            print(batch_idx)
             # Expecting batch_data = (input_tensor, S_truth_tensor)
             input_tensor, S_truth_tensor = batch_data
             
