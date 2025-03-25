@@ -43,11 +43,26 @@ def beat_times(path, start_time=None, end_time=None, sr=SAMPLING_RATE, fps=FPS):
   return beattracking_processor(beat_activations_)
 
 
-def melspectrogram(path):
+def compute_stft(path, sr=SAMPLING_RATE):
+    """
+    Compute the Short-Time Fourier Transform (STFT) of an audio signal.
+
+    Returns:
+        stft_magnitude (numpy.ndarray): Magnitude of the STFT.
+        stft_phase (numpy.ndarray): Phase of the STFT.
+    """
+    audio_signal, sr = librosa.load(path, sr=sr)
+    stft_result = librosa.stft(y=audio_signal, n_fft=N_FFT, hop_length=HOP_LENGTH)
+    stft_magnitude = np.abs(stft_result)
+    stft_phase = np.angle(stft_result)
+    return stft_result, stft_magnitude, stft_phase
+
+
+def melspectrogram(path, sr=SAMPLING_RATE):
     # 22050 may be too small for proper alignment and learning,
     # but 44100 may be too big for our computational power
 
-    audio_signal, sr = librosa.load(path, sr=SAMPLING_RATE)
+    audio_signal, sr = librosa.load(path, sr=sr)
     melspectrogram_ = librosa.feature.melspectrogram(y=audio_signal, sr=sr,
                                                      n_fft=N_FFT, hop_length=HOP_LENGTH,
                                                      n_mels=N_MELS)
