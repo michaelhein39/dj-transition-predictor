@@ -95,14 +95,11 @@ def segmentation(mix_id):
         cue_out_time_mix = mix_beat_times[cue_out_beat_mix]  # Beginning of transition region
         cue_in_time_mix = mix_beat_times[cue_in_beat_mix]  # End of transition region
 
-        print(1)
         bpm_orig_S1 = calculate_bpm(path_S1)
         bpm_orig_S2 = calculate_bpm(path_S2)
         bpm_target = calculate_bpm(mix_path,
                                    start_time=cue_out_time_mix,
                                    end_time=cue_in_time_mix)
-
-        print(3)
 
         result = {
                 'mix_id': mix_id,
@@ -124,8 +121,6 @@ def segmentation(mix_id):
                 }
         results.append(result)
 
-        break
-
     # Convert results to DataFrame
     df_results = pd.DataFrame(results)
 
@@ -138,10 +133,7 @@ def segmentation(mix_id):
 
 
 def calculate_bpm(audio_path, start_time=None, end_time=None, sr=SAMPLING_RATE):
-    print(2)
     beat_times_ = beat_times(audio_path, start_time=start_time, end_time=end_time, sr=sr)
-    print(2.5)
-    
     if len(beat_times_) > 1:
         intervals = np.diff(beat_times_)
         bpm = 60.0 / np.mean(intervals)
