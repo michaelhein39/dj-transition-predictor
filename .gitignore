@@ -8,6 +8,9 @@ align/
 # Segmentation data
 segment/
 
+# Preprocessed data
+preprocessed/
+
 # CSV files
 *.csv
 
