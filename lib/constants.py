@@ -5,4 +5,4 @@ N_MELS = 128
 N_MFCC = 12
 N_CHROMA = 12
 FPS = 100
-SEGMENT_DURATION = 15  # 15 seconds segment length
+SEGMENT_DURATION = 30  # 15 seconds segment length

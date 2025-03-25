@@ -11,7 +11,7 @@ Steps:
     1) Time stretch S1 and S2 to target BPM
     2) Extract mel-spectrograms
     3) Compute frame indices from cue points
-    4) Extract 15-second segment around the transition
+    4) Extract (SEGMENT_DURATION)-second segment around the transition
     5) Save input and label pairs
 
 """
@@ -78,7 +78,7 @@ def generate_training_tensors(S1_audio_signal, S2_audio_signal, mix_audio_signal
     Prepare a single input batch and corresponding truth label for training.
 
     Time stretch the two input audio signals to the target BPM, convert to mel-spectrograms,
-    extract a 15-second segment around the cue points, and pad if necessary.
+    extract a (SEGMENT_DURATION)-second segment around the cue points, and pad if necessary.
 
     Finally, convert all to torch tensors and combine the two segments as channels.
 
@@ -127,7 +127,7 @@ def generate_training_tensors(S1_audio_signal, S2_audio_signal, mix_audio_signal
     if z_frames < total_frames:
         # x and y split the remaining time
         remainder = total_frames - z_frames
-        x_frames = remainder // 2
+        x_frames = int(remainder / 2)
         y_frames = remainder - x_frames
     else:
         # If z_frames == total_frames just set x_frames = y_frames = 0
@@ -195,7 +195,7 @@ def convert_beat_time_to_frame(beat_time, bpm_orig, bpm_target, sr, hop_length):
     scaled_time = beat_time * scaling_factor
 
     # Convert scaled time to frame index in the time-stretched mel-spectrogram
-    frame_index = (scaled_time * sr) // hop_length
+    frame_index = int(scaled_time * sr / hop_length)
 
     return frame_index
 
@@ -205,9 +205,9 @@ def compute_num_frames(duration_sec, sr=SAMPLING_RATE, hop_length=HOP_LENGTH):
     Given a duration in seconds, compute how many STFT frames correspond to that duration.
     Number of frames = floor(duration_sec * sr / hop_length)
 
-    This equates to 645 frames for 15 seconds.
+    This equates to 645 frames for a 15-second segment.
     """
-    num_frames = (duration_sec * sr) // hop_length
+    num_frames = int(duration_sec * sr / hop_length)
     return num_frames
 
 
@@ -233,15 +233,15 @@ def segment_melspectrogram(S, start, end, total_frames):
     # This assumes that only one of these conditions is true, when in reality
     # it's possible for both to be true.
     if start < 0:
-        # Pad on the left
+        # Pad on the left due to negative start
         left_pad = abs(start)
         S_segment = np.hstack([np.zeros((n_mels, left_pad)), S[:, :end]])
     elif end > n_frames:
-        # Pad on the right
+        # Pad on the right due to end > n_frames
         right_pad = end - n_frames
         S_segment = np.hstack([S[:, start:], np.zeros((n_mels, right_pad))])
     else:
-        # No padding
+        # No padding because start and end are valid in audio
         S_segment = S[:, start:end]
 
     # Ensure the segment has exactly total_frames frames
@@ -253,7 +253,8 @@ def segment_melspectrogram(S, start, end, total_frames):
 
 if __name__ == "__main__":
     # Path to the filtered CSV file
-    csv_file = 'data/filtered_input_output_pairs.csv'
+    # csv_file = 'data/filtered_input_output_pairs.csv'
+    csv_file = 'data/segment/filtered_input_output_pairs.csv'
 
     # Directory to save the preprocessed data
     save_dir = 'data/preprocessed'
