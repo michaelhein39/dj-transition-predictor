@@ -52,6 +52,8 @@ class SingleSampleDataset(Dataset):
             preprocessed_dir (str): Directory with the single preprocessed .pt file.
             n_repeats (int): Number of times to repeat the sample.
         """
+        self.preprocessed_dir = preprocessed_dir
+
         self.file_list = [os.path.join(self.preprocessed_dir, fname)
                           for fname in os.listdir(self.preprocessed_dir) if fname.endswith('.pt')]
 
