@@ -11,6 +11,9 @@ segment/
 # Preprocessed data
 preprocessed/
 
+# Saved models
+models/
+
 # CSV files
 *.csv
 
