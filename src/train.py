@@ -43,7 +43,7 @@ def train_model(model,
         
         # Iterate over batches from the train_loader
         for batch_idx, batch_data in enumerate(train_loader):
-            print(batch_idx)
+            print(f'\t{batch_idx}')
             # Expecting batch_data = (input_tensor, S_truth_tensor)
             input_tensor, S_truth_tensor = batch_data
             
