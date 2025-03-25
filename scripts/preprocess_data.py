@@ -24,11 +24,8 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 import lib.feature as ft
+from lib.constants import *
 
-
-SAMPLING_RATE = 22050       # Sampling rate for audio
-HOP_LENGTH = 512            # Hop length for STFT -> mel-spectrogram
-SEGMENT_DURATION = 15.0     # 15 seconds segment length
 
 def main(csv_file, save_dir, overwrite=False):
     os.makedirs(save_dir, exist_ok=True)
