@@ -45,7 +45,7 @@ def train_model(model,
         for batch_idx, batch_data in enumerate(train_loader):
             print(f'\t{batch_idx}')
             # Expecting batch_data = (input_tensor, S_truth_tensor)
-            input_tensor, S_truth_tensor, _ = batch_data
+            input_tensor, S_truth_tensor = batch_data
             
             # Move data to device
             input_tensor = input_tensor.to(device)     # shape: (batch, 2, N_MELS, T)
