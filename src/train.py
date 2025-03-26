@@ -45,7 +45,7 @@ def train_model(model,
         for batch_idx, batch_data in enumerate(train_loader):
             print(f'\t{batch_idx}')
             # Expecting batch_data = (input_tensor, S_truth_tensor)
-            input_tensor, S_truth_tensor = batch_data
+            input_tensor, S_truth_tensor, _ = batch_data
             
             # Move data to device
             input_tensor = input_tensor.to(device)     # shape: (batch, 2, N_MELS, T)
@@ -99,12 +99,12 @@ def train_model(model,
         print(f"Epoch [{epoch+1}/{epochs}], Loss: {avg_loss:.6f}")
 
         # Save model checkpoint
-        checkpoint_path = os.path.join(save_dir, f'model_epoch_{epoch+1}.pth')
+        checkpoint_path = os.path.join(save_dir, f'mel_lr1e-5_epoch_{epoch+1}.pth')
         torch.save(model.state_dict(), checkpoint_path)
         print(f"Model checkpoint saved at {checkpoint_path}")
 
     # Save final model
-    final_model_path = os.path.join(save_dir, 'model_final.pth')
+    final_model_path = os.path.join(save_dir, 'mel_lr1e-5_final.pth')
     torch.save(model.state_dict(), final_model_path)
     print(f"Final model saved at {final_model_path}")
 

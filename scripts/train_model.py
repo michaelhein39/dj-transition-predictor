@@ -10,7 +10,7 @@ def main():
     model = TransitionPredictor()
 
     # Define optimizer
-    optimizer = optim.Adam(model.parameters(), lr=0.001)  # Adjust learning rate as needed
+    optimizer = optim.Adam(model.parameters(), lr=1e-5)  # Adjust learning rate as needed
 
     # Dataset and DataLoader, using a single sample to demonstrate model
     preprocessed_dir = 'data/preprocessed'
