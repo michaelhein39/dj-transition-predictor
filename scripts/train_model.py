@@ -1,16 +1,17 @@
 import torch
 import torch.optim as optim
+import numpy as np
 from torch.utils.data import DataLoader
 from src.models import TransitionPredictor
 from src.train import train_model
 from src.datasets import DJTransitionDataset, SingleSampleDataset
 
-def main():
+def run_training(lr, epochs, model_save_name):
     # Initialize model
     model = TransitionPredictor()
 
     # Define optimizer
-    optimizer = optim.Adam(model.parameters(), lr=1e-5)  # Adjust learning rate as needed
+    optimizer = optim.Adam(model.parameters(), lr=lr)  # Adjust learning rate as needed
 
     # Dataset and DataLoader, using a single sample to demonstrate model
     preprocessed_dir = 'data/preprocessed'
@@ -21,7 +22,16 @@ def main():
 
     # Train the model
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    train_model(model, train_loader, optimizer, epochs=10, device=device, save_dir='models')
+    loss_array = train_model(model, train_loader, optimizer, model_save_name,
+                             epochs=epochs, device=device, save_dir='models')
+    
+    return loss_array
 
 if __name__ == '__main__':
-    main()
+    lr = 1e-5
+    epochs = 10
+    model_save_name = 'mel_lr1e-5'
+    loss_array = run_training(lr, epochs, model_save_name)
+
+    # Save the loss array to a file
+    np.save(f'{model_save_name}_loss_array.npy', loss_array)

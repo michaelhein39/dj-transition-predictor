@@ -4,7 +4,8 @@ import torch.nn as nn
 
 def train_model(model, 
                 train_loader, 
-                optimizer, 
+                optimizer,
+                model_save_name,
                 epochs=10, 
                 device='cpu',
                 save_dir='models'):
@@ -34,6 +35,8 @@ def train_model(model,
 
     # Ensure save directory exists
     os.makedirs(save_dir, exist_ok=True)
+
+    loss_array = []
 
     # Loop over epochs
     for epoch in range(epochs):
@@ -92,21 +95,24 @@ def train_model(model,
             
             # Accumulate loss
             epoch_loss += loss.item()
+            loss_array.append(loss.item())
             num_batches += 1
         
         # Print average loss for this epoch
-        avg_loss = epoch_loss / num_batches if num_batches > 0 else 0.0
-        print(f"Epoch [{epoch+1}/{epochs}], Loss: {avg_loss:.6f}")
+        avg_epoch_loss = epoch_loss / num_batches if num_batches > 0 else 0.0
+        print(f"Epoch [{epoch+1}/{epochs}], Loss: {avg_epoch_loss:.6f}")
 
         # Save model checkpoint
-        checkpoint_path = os.path.join(save_dir, f'mel_lr1e-5_epoch_{epoch+1}.pth')
+        checkpoint_path = os.path.join(save_dir, f'{model_save_name}_epoch_{epoch+1}.pth')
         torch.save(model.state_dict(), checkpoint_path)
         print(f"Model checkpoint saved at {checkpoint_path}")
 
     # Save final model
-    final_model_path = os.path.join(save_dir, 'mel_lr1e-5_final.pth')
+    final_model_path = os.path.join(save_dir, f'{model_save_name}_final.pth')
     torch.save(model.state_dict(), final_model_path)
     print(f"Final model saved at {final_model_path}")
+
+    return loss_array
 
 
 ############################################################
