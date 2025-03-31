@@ -53,7 +53,7 @@ def main(csv_file, save_dir, overwrite=False):
             continue
 
         # Create input and truth tensors
-        input_tensor, S_truth_tensor, phases = generate_training_tensors(
+        input_tensor, S_truth_tensor, phases, audios = generate_training_tensors(
             S1_audio_path, S2_audio_path, mix_audio_path,
             cue_out_time_S1, cue_in_time_S2,
             cue_out_time_mix, cue_in_time_mix,
@@ -61,7 +61,7 @@ def main(csv_file, save_dir, overwrite=False):
         )
         
         # Save the processed data
-        torch.save((input_tensor, S_truth_tensor, phases), file_path)
+        torch.save((input_tensor, S_truth_tensor, phases, audios), file_path)
 
 
 def generate_training_tensors(S1_audio_path, S2_audio_path, mix_audio_path, 
@@ -163,6 +163,11 @@ def generate_training_tensors(S1_audio_path, S2_audio_path, mix_audio_path,
     S2_phase_segment = segment_melspectrogram(S2_phase, start_s2, end_s2, total_frames)
     S_truth_phase_segment = segment_melspectrogram(mix_phase, start_mix, end_mix, total_frames)
 
+    # Extract raw audio waveform segments
+    S1_audio_segment = segment_audio(S1_stretched, start_s1, end_s1, total_frames, hop_length)
+    S2_audio_segment = segment_audio(S2_stretched, start_s2, end_s2, total_frames, hop_length)
+    S_truth_audio_segment = segment_audio(mix_audio_signal, start_mix, end_mix, total_frames, hop_length, sr)
+
     # Convert all to torch tensors
     S1_tensor = torch.tensor(S1_segment, dtype=torch.float32).unsqueeze(0) # shape: (1, N_MELS, F)
     S2_tensor = torch.tensor(S2_segment, dtype=torch.float32).unsqueeze(0) # shape: (1, N_MELS, F)
@@ -178,7 +183,14 @@ def generate_training_tensors(S1_audio_path, S2_audio_path, mix_audio_path,
         'S_truth_phase': S_truth_phase_segment
     }
 
-    return input_tensor, S_truth_tensor, phases
+    # Save raw audio waveforms in a dictionary
+    audios = {
+        'S1_audio': S1_audio_segment,
+        'S2_audio': S2_audio_segment,
+        'S_truth_audio': S_truth_audio_segment
+    }
+
+    return input_tensor, S_truth_tensor, phases, audios
 
 
 def adjust_bpm(audio_signal, bpm_orig, bpm_target):
@@ -268,6 +280,44 @@ def segment_melspectrogram(S, start, end, total_frames):
         raise ValueError("Segment has wrong number of frames.")
     
     return S_segment
+
+
+def segment_audio(audio_signal, start_frame, end_frame, total_frames, hop_length):
+    """
+    Extract a segment of the audio signal, padding if necessary to match the total_frames.
+
+    Parameters:
+        audio_signal (numpy.ndarray): The raw audio signal.
+        start_frame (int): Start frame index (inclusive).
+        end_frame (int): End frame index (exclusive).
+        total_frames (int): The expected number of frames in the segment.
+        hop_length (int): Hop length used in STFT.
+        sr (int): Sampling rate.
+
+    Returns:
+        numpy.ndarray: The extracted audio segment.
+    """
+    start_sample = start_frame * hop_length
+    end_sample = end_frame * hop_length
+    segment_duration_samples = total_frames * hop_length
+
+    if start_sample < 0:
+        # Pad at the beginning
+        left_pad = abs(start_sample)
+        audio_segment = np.pad(audio_signal[:end_sample], (left_pad, 0), mode='constant')
+    elif end_sample > len(audio_signal):
+        # Pad at the end
+        right_pad = end_sample - len(audio_signal)
+        audio_segment = np.pad(audio_signal[start_sample:], (0, right_pad), mode='constant')
+    else:
+        # No padding needed
+        audio_segment = audio_signal[start_sample:end_sample]
+
+    # Ensure the segment has exactly the expected number of samples
+    if len(audio_segment) != segment_duration_samples:
+        raise ValueError("Segment has wrong length.")
+    
+    return audio_segment
 
 
 if __name__ == "__main__":
