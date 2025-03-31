@@ -71,7 +71,7 @@ class SingleSampleDataset(Dataset):
     def __getitem__(self, idx):
         file_path = self.file_list[0]
         try:
-            input_tensor, S_truth_tensor, _ = torch.load(file_path)
+            input_tensor, S_truth_tensor, _, _ = torch.load(file_path)
         except Exception as e:
             raise RuntimeError(f"Error loading file {file_path}: {e}")
         return input_tensor, S_truth_tensor
