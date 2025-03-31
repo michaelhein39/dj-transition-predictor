@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.optim as optim
 import numpy as np
@@ -28,10 +29,13 @@ def run_training(lr, epochs, model_save_name):
     return loss_array
 
 if __name__ == '__main__':
-    lr = 1e-5
+    lr = 1e-4
     epochs = 10
-    model_save_name = 'mel_lr1e-5'
+    model_save_name = 'mel_lr1e-4'
     loss_array = run_training(lr, epochs, model_save_name)
 
     # Save the loss array to a file
-    np.save(f'{model_save_name}_loss_array.npy', loss_array)
+    os.makedirs('losses', exist_ok=True)
+    path = os.path.join('losses', f'{model_save_name}_loss_array.npy')
+    np.save(path, loss_array)
+    print(f"Loss array saved at {path}")
