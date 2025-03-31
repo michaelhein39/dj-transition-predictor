@@ -166,7 +166,7 @@ def generate_training_tensors(S1_audio_path, S2_audio_path, mix_audio_path,
     # Extract raw audio waveform segments
     S1_audio_segment = segment_audio(S1_stretched, start_s1, end_s1, total_frames, hop_length)
     S2_audio_segment = segment_audio(S2_stretched, start_s2, end_s2, total_frames, hop_length)
-    S_truth_audio_segment = segment_audio(mix_audio_signal, start_mix, end_mix, total_frames, hop_length, sr)
+    S_truth_audio_segment = segment_audio(mix_audio_signal, start_mix, end_mix, total_frames, hop_length)
 
     # Convert all to torch tensors
     S1_tensor = torch.tensor(S1_segment, dtype=torch.float32).unsqueeze(0) # shape: (1, N_MELS, F)
