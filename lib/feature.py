@@ -10,6 +10,7 @@ np.int = int
 # Madmom is generally preferred over Librosa for beat tracking accuracy
 # DBNBeatTrackingProcessor is generally preferred over BeatTrackingProcessor
 from madmom.features.beats import RNNBeatProcessor, BeatTrackingProcessor, DBNBeatTrackingProcessor
+from madmom.features.downbeats import RNNDownBeatProcessor, DBNDownBeatTrackingProcessor
 
 memory = Memory('./cache', verbose=1)
 
@@ -144,6 +145,71 @@ def beat_chroma_cqt(path):
   chroma_cqt_ = chroma_cqt(path)
   beat_chroma_cqt_ = beat_aggregate(chroma_cqt_, beat_times_)
   return beat_chroma_cqt_
+
+
+@memory.cache
+def spectral_contrast(path):
+    audio_signal, sr = librosa.load(path, sr=SAMPLING_RATE)
+    contrast = librosa.feature.spectral_contrast(y=audio_signal, sr=sr,
+                                                 n_fft=N_FFT, hop_length=HOP_LENGTH)
+    return contrast
+
+
+@memory.cache
+def beat_spectral_contrast(path):
+    beat_times_ = beat_times(path)
+    contrast = spectral_contrast(path)
+    return beat_aggregate(contrast, beat_times_)
+
+
+@memory.cache
+def onset_strength(path):
+    audio_signal, sr = librosa.load(path, sr=SAMPLING_RATE)
+    onset_env = librosa.onset.onset_strength(y=audio_signal, sr=sr, hop_length=HOP_LENGTH)
+    return onset_env
+
+
+@memory.cache
+def beat_onset_strength(path):
+    beat_times_ = beat_times(path)
+    onset_env = onset_strength(path)
+    onset_env = np.expand_dims(onset_env, axis=0)  # Make it 2D for beat_aggregate
+    return beat_aggregate(onset_env, beat_times_)
+
+
+@memory.cache
+def beat_downbeat_probabilities(path):
+    """
+    Returns downbeat probabilities sampled at beat timestamps.
+    This is beat-synchronous (not aggregated).
+    """
+    # Get beat timestamps using the previously defined beat_times function.
+    beat_times_ = beat_times(path)
+    
+    # Process the audio file with the RNNDownBeatProcessor.
+    # The returned activations are assumed to be a 2D array where:
+    # - Column 0: beat probabilities.
+    # - Column 1: downbeat probabilities.
+    downbeat_processor = RNNDownBeatProcessor()
+    activations = downbeat_processor(path)
+    
+    # Extract the downbeat probabilities.
+    downbeat_probs = activations[:, 1]
+    
+    # Convert beat timestamps (seconds) to corresponding frame indices.
+    beat_frames = librosa.time_to_frames(beat_times_, sr=SAMPLING_RATE, hop_length=HOP_LENGTH)
+    
+    # Clip indices to ensure they don't exceed the array bounds.
+    print(len(beat_frames), len(downbeat_probs))
+    beat_frames = np.clip(beat_frames, 0, len(downbeat_probs) - 1)
+    
+    # Sample the downbeat probabilities at the beat frames.
+    beat_downbeat_probs = downbeat_probs[beat_frames]
+
+    # Make it 2D
+    beat_downbeat_probs = np.expand_dims(beat_downbeat_probs, axis=0)
+    
+    return beat_downbeat_probs
 
 
 def beat_aggregate(feature, beat_times_):
