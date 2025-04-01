@@ -200,8 +200,6 @@ def beat_downbeat_probabilities(path):
     beat_frames = (beat_times_ * FPS).astype(int)  # Same FPS used for RNNDownBeatProcessor
     
     # Clip indices to ensure they don't exceed the array bounds.
-    print(len(downbeat_probs))
-    print(beat_frames[-5:])
     beat_frames = np.clip(beat_frames, 0, len(downbeat_probs) - 1)
     
     # Sample the downbeat probabilities at the beat frames.
