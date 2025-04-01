@@ -1,4 +1,5 @@
 import os
+import random
 import torch
 import torch.optim as optim
 import numpy as np
@@ -7,7 +8,11 @@ from src.models import TransitionPredictor
 from src.train import train_model
 from src.datasets import DJTransitionDataset, SingleSampleDataset
 
-def run_training(lr, epochs, model_save_name):
+
+def run_training(lr, epochs, model_save_name, seed):
+    # Set the seed for reproducibility
+    set_seed(seed)
+
     # Initialize model
     model = TransitionPredictor()
 
@@ -23,16 +28,27 @@ def run_training(lr, epochs, model_save_name):
 
     # Train the model
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    loss_array = train_model(model, train_loader, optimizer, model_save_name,
+    loss_array = train_model(model, train_loader, optimizer, model_save_name, seed,
                              epochs=epochs, device=device, save_dir='models')
     
     return loss_array
 
+
+def set_seed(seed):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
 if __name__ == '__main__':
-    lr = 1e-4
+    lr = 1e-5
     epochs = 10
-    model_save_name = 'mel_lr1e-4'
-    loss_array = run_training(lr, epochs, model_save_name)
+    model_save_name = 'mel_lr1e-5'
+    seed = 2025
+    loss_array = run_training(lr, epochs, model_save_name, seed)
 
     # Save the loss array to a file
     os.makedirs('losses', exist_ok=True)

@@ -1,4 +1,6 @@
 import os
+import random
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -6,6 +8,7 @@ def train_model(model,
                 train_loader, 
                 optimizer,
                 model_save_name,
+                seed,
                 epochs=10, 
                 device='cpu',
                 save_dir='models'):
@@ -28,6 +31,9 @@ def train_model(model,
     Returns:
         None: The model is trained in-place. Prints loss after each epoch.
     """
+    
+    # Set the seed for reproducibility
+    set_seed(seed)
 
     # Move model to the specified device (GPU or CPU)
     model.to(device)
@@ -113,6 +119,15 @@ def train_model(model,
     print(f"Final model saved at {final_model_path}")
 
     return loss_array
+
+
+def set_seed(seed):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 
 ############################################################
