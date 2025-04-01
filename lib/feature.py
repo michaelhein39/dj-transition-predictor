@@ -158,7 +158,7 @@ def spectral_contrast(path):
 @memory.cache
 def beat_spectral_contrast(path):
     beat_times_ = beat_times(path)
-    contrast = spectral_contrast(path)
+    contrast = spectral_contrast(path)  # Shape is (7, n_beats)
     return beat_aggregate(contrast, beat_times_)
 
 
@@ -197,10 +197,11 @@ def beat_downbeat_probabilities(path):
     downbeat_probs = activations[:, 1]
     
     # Convert beat timestamps (seconds) to corresponding frame indices.
-    beat_frames = librosa.time_to_frames(beat_times_, sr=SAMPLING_RATE, hop_length=HOP_LENGTH)
+    beat_frames = (beat_times_ * FPS).astype(int)  # Same FPS used for RNNDownBeatProcessor
     
     # Clip indices to ensure they don't exceed the array bounds.
-    print(len(beat_frames), len(downbeat_probs))
+    print(len(downbeat_probs))
+    print(beat_frames[-5:])
     beat_frames = np.clip(beat_frames, 0, len(downbeat_probs) - 1)
     
     # Sample the downbeat probabilities at the beat frames.
@@ -213,11 +214,11 @@ def beat_downbeat_probabilities(path):
 
 
 def beat_aggregate(feature, beat_times_):
-  """
-  Takes a feature of a song and aggregates it by beats so that there is a
-  single value for each beat. This allows you to analyze the audio signal
-  in terms of beats rather than individual frames.
-  The output is an array of size (n_features, n_beats).
-  """
-  beat_frames = librosa.time_to_frames(beat_times_, sr=SAMPLING_RATE, hop_length=HOP_LENGTH)
-  return librosa.util.sync(feature, beat_frames, aggregate=np.mean)
+    """
+    Takes a feature of a song and aggregates it by beats so that there is a
+    single value for each beat. This allows you to analyze the audio signal
+    in terms of beats rather than individual frames.
+    The output is an array of size (n_features, n_beats).
+    """
+    beat_frames = librosa.time_to_frames(beat_times_, sr=SAMPLING_RATE, hop_length=HOP_LENGTH)
+    return librosa.util.sync(feature, beat_frames, aggregate=np.mean)
