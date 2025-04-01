@@ -8,8 +8,8 @@ align/
 # Preprocessed data
 preprocessed/
 
-# Saved models
-models/
+# Saved model checkpoints
+checkpoints/
 
 # CSV files
 *.csv
