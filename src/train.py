@@ -3,6 +3,8 @@ import random
 import numpy as np
 import torch
 import torch.nn as nn
+from tqdm import tqdm
+
 
 def train_model(model, 
                 train_loader, 
@@ -46,64 +48,69 @@ def train_model(model,
 
     # Loop over epochs
     for epoch in range(epochs):
-        print(f'EPOCH {epoch+1}')
         epoch_loss = 0.0
         num_batches = 0
         
-        # Iterate over batches from the train_loader
-        for batch_idx, batch_data in enumerate(train_loader):
-            print(f'\t{batch_idx}')
-            # Expecting batch_data = (input_tensor, S_truth_tensor)
-            input_tensor, S_truth_tensor = batch_data
-            
-            # Move data to device
-            input_tensor = input_tensor.to(device)     # shape: (batch, 2, N_MELS, T)
-            S_truth_tensor = S_truth_tensor.to(device) # shape: (batch, N_MELS, T)
+        # Create a progress bar for the training loop
+        with tqdm(total=len(train_loader), desc=f"Epoch {epoch+1}") as pbar:
+            # Iterate over batches from the train_loader
+            for batch_idx, batch_data in enumerate(train_loader):
+                print(f'\t{batch_idx}')
+                # Expecting batch_data = (input_tensor, S_truth_tensor)
+                input_tensor, S_truth_tensor = batch_data
+                
+                # Move data to device
+                input_tensor = input_tensor.to(device)     # shape: (batch, 2, N_MELS, T)
+                S_truth_tensor = S_truth_tensor.to(device) # shape: (batch, N_MELS, T)
 
-            # Reset gradients from previous iteration
-            optimizer.zero_grad()
-            
-            # Forward pass: model predicts the control signals
-            # control_signals shape: (batch, volume_control_signal_count + bandpass_control_signal_count)
-            control_signals = model(input_tensor)
-            
-            # We'll accumulate each example's predicted spectrogram, then stack them.
-            batch_size = control_signals.size(0)
-            S_pred_list = []
-            
-            for i in range(batch_size):
-                # Extract the control signals for the i-th item in the batch
-                # shape: (volume_control_signal_count + bandpass_control_signal_count,)
-                ctrl_signals_i = control_signals[i]
+                # Reset gradients from previous iteration
+                optimizer.zero_grad()
+                
+                # Forward pass: model predicts the control signals
+                # control_signals shape: (batch, volume_control_signal_count + bandpass_control_signal_count)
+                control_signals = model(input_tensor)
+                
+                # We'll accumulate each example's predicted spectrogram, then stack them.
+                batch_size = control_signals.size(0)
+                S_pred_list = []
+                
+                for i in range(batch_size):
+                    # Extract the control signals for the i-th item in the batch
+                    # shape: (volume_control_signal_count + bandpass_control_signal_count,)
+                    ctrl_signals_i = control_signals[i]
 
-                # Slice the i-th example from input_tensor => shape: (2, N_MELS, T)
-                # Then extract the channels for S1 and S2
-                S_i = input_tensor[i]    # shape: (2, N_MELS, T)
-                S1_i = S_i[0]           # shape: (N_MELS, T)
-                S2_i = S_i[1]           # shape: (N_MELS, T)
+                    # Slice the i-th example from input_tensor => shape: (2, N_MELS, T)
+                    # Then extract the channels for S1 and S2
+                    S_i = input_tensor[i]    # shape: (2, N_MELS, T)
+                    S1_i = S_i[0]           # shape: (N_MELS, T)
+                    S2_i = S_i[1]           # shape: (N_MELS, T)
 
-                # apply_masks returns a tensor of shape (N_MELS, T)
-                S_pred_i = apply_masks(S1_i, S2_i, ctrl_signals_i, n_mels=S1_i.size(0))
-                S_pred_list.append(S_pred_i.unsqueeze(0))
-            
-            # Stack all predicted spectrograms in the batch
-            # final shape: (batch, N_MELS, T)
-            S_pred = torch.cat(S_pred_list, dim=0)
+                    # apply_masks returns a tensor of shape (N_MELS, T)
+                    S_pred_i = apply_masks(S1_i, S2_i, ctrl_signals_i, n_mels=S1_i.size(0))
+                    S_pred_list.append(S_pred_i.unsqueeze(0))
+                
+                # Stack all predicted spectrograms in the batch
+                # final shape: (batch, N_MELS, T)
+                S_pred = torch.cat(S_pred_list, dim=0)
 
-            # Compute loss against ground truth
-            loss = l1_loss(S_pred, S_truth_tensor)
+                # Compute loss against ground truth
+                loss = l1_loss(S_pred, S_truth_tensor)
+                
+                # Backpropagation
+                loss.backward()
+                
+                # Gradient update
+                optimizer.step()
+                
+                # Accumulate loss
+                epoch_loss += loss.item()
+                loss_array.append(loss.item())
+                num_batches += 1
+
+                # Update the progress bar
+                pbar.update(1)
+                pbar.set_postfix({"batch_loss": loss.item()})
             
-            # Backpropagation
-            loss.backward()
-            
-            # Gradient update
-            optimizer.step()
-            
-            # Accumulate loss
-            epoch_loss += loss.item()
-            loss_array.append(loss.item())
-            num_batches += 1
-        
         # Print average loss for this epoch
         avg_epoch_loss = epoch_loss / num_batches if num_batches > 0 else 0.0
         print(f"Epoch [{epoch+1}/{epochs}], Loss: {avg_epoch_loss:.6f}")
