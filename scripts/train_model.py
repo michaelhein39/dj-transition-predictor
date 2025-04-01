@@ -29,7 +29,7 @@ def run_training(lr, epochs, model_save_name, seed):
     # Train the model
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     loss_array = train_model(model, train_loader, optimizer, model_save_name, seed,
-                             epochs=epochs, device=device, save_dir='models')
+                             epochs=epochs, device=device, save_dir='checkpoints')
     
     return loss_array
 
@@ -44,10 +44,13 @@ def set_seed(seed):
 
 
 if __name__ == '__main__':
-    lr = 1e-5
+    lr = 1e-6
     epochs = 10
-    model_save_name = 'mel_lr1e-5'
+    model_save_name = 'mel_lr1e-6'
+
+    # Tried: 2025 (no S2), 42 (good loss, but no S2), 123 (no S2)
     seed = 2025
+    
     loss_array = run_training(lr, epochs, model_save_name, seed)
 
     # Save the loss array to a file

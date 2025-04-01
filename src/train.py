@@ -11,7 +11,7 @@ def train_model(model,
                 seed,
                 epochs=10, 
                 device='cpu',
-                save_dir='models'):
+                save_dir='checkpoints'):
     """
     Train the TransitionPredictor model using spectrogram masking and an MSE loss.
     This version expects the DataLoader to yield only (input_tensor, S_truth_tensor),
@@ -31,7 +31,7 @@ def train_model(model,
     Returns:
         None: The model is trained in-place. Prints loss after each epoch.
     """
-    
+
     # Set the seed for reproducibility
     set_seed(seed)
 
