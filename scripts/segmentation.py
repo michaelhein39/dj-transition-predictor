@@ -17,7 +17,8 @@ CASES = [
 df_tlist = pd.read_csv('data/meta/tracks_trunc.csv')
 df_mlist = pd.read_csv('data/meta/mixes_trunc.csv')
 
-df_align = pd.concat([pd.read_pickle(p) for p in glob('data/align/*-chroma-key_invariant.pkl')]).set_index('mix_id')
+# Only uses one pkl file right now (chroma CQT)
+df_align = pd.concat([pd.read_pickle(p) for p in glob('data/align/*-chroma_cqt.pkl')]).set_index('mix_id')
 df_align['case'] = df_align.feature
 df_align.loc[df_align.key_invariant, 'case'] += '-keyinv'
 
@@ -40,7 +41,7 @@ def main():
         result = segmentation(mix.mix_id)
         data.append(result)
     df = pd.concat(data, ignore_index=True)
-    df.to_csv('data/segment/all_mix_segmentation.csv', index=False)  # Overwrites existing file
+    df.to_csv('data/segment/filtered_input_output_pairs.csv', index=False)  # Overwrites existing file
 
 
 
