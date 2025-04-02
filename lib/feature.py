@@ -9,39 +9,44 @@ np.int = int
 
 # Madmom is generally preferred over Librosa for beat tracking accuracy
 # DBNBeatTrackingProcessor is generally preferred over BeatTrackingProcessor
-from madmom.features.beats import RNNBeatProcessor, BeatTrackingProcessor, DBNBeatTrackingProcessor
-from madmom.features.downbeats import RNNDownBeatProcessor, DBNDownBeatTrackingProcessor
+from madmom.features.beats import DBNBeatTrackingProcessor
+from madmom.features.downbeats import RNNDownBeatProcessor
 
 memory = Memory('./cache', verbose=1)
 
 @memory.cache
 def beat_activations(path, start_time=None, end_time=None, sr=SAMPLING_RATE):
-  """
-  RNNBeatProcessor predicts the beat locations in an audio signal.
-  The output are the activations, which are the probabilities of each frame
-  being a beat (100 frames per second).
-  """
-  beat_processor = RNNBeatProcessor()
-  if start_time is not None and end_time is not None:
-    y, _ = librosa.load(path, sr=sr, offset=start_time, duration=(end_time - start_time))
-    return beat_processor(y)
-  else:
-    return beat_processor(path)
+    """
+    RNNBeatProcessor predicts the beat locations in an audio signal.
+    The output are the activations, which are the probabilities of each frame
+    being a beat (100 frames per second).
+    """
+    beat_processor = RNNDownBeatProcessor()
+    if start_time is not None and end_time is not None:
+        y, _ = librosa.load(path, sr=sr, offset=start_time, duration=(end_time - start_time))
+        activations = beat_processor(y)
+        beat_activations_ = activations[:, 0]
+        downbeat_activations_ = activations[:, 1]
+    else:
+        activations = beat_processor(path)
+        beat_activations_ = activations[:, 0]
+        downbeat_activations_ = activations[:, 1]
+    return beat_activations_, downbeat_activations_
 
 
 @memory.cache
 def beat_times(path, start_time=None, end_time=None, sr=SAMPLING_RATE, fps=FPS):
-  """
-  DBNBeatTrackingProcessor predicts the beat locations in an audio signal.
-  The output is an array of the time stamps (in seconds) of each beat.
+    """
+    DBNBeatTrackingProcessor predicts the beat locations in an audio signal.
+    The output is an array of the time stamps (in seconds) of each beat.
 
-  fps: frames per second
-  A higher fps will result in more precise beat tracking, but at a higher
-  computational cost.
-  """
-  beat_activations_ = beat_activations(path, start_time=start_time, end_time=end_time, sr=sr)
-  beattracking_processor = DBNBeatTrackingProcessor(fps=fps)
-  return beattracking_processor(beat_activations_)
+    fps: frames per second
+    A higher fps will result in more precise beat tracking, but at a higher
+    computational cost.
+    """
+    beat_activations_, _ = beat_activations(path, start_time=start_time, end_time=end_time, sr=sr)
+    beattracking_processor = DBNBeatTrackingProcessor(fps=fps)
+    return beattracking_processor(beat_activations_)
 
 
 def audio_signal_stft(audio_signal):
@@ -87,64 +92,64 @@ def beat_melspectrogram(path):
 
 @memory.cache
 def mfcc(path):
-  """
-  Compute MFCC features for an audio signal.
-  The output is an array of size (n_mfcc, n_frames).
+    """
+    Compute MFCC features for an audio signal.
+    The output is an array of size (n_mfcc, n_frames).
 
-  n_mfcc: number of MFCCs that the audio is split into
-  A higher n_mfcc would be desired for capturing a wider range of spectral features.
-  """
-  audio_signal, sr = librosa.load(path, sr=SAMPLING_RATE)
-  mfcc_ = librosa.feature.mfcc(y=audio_signal, sr=sr,
-                               n_fft=N_FFT, hop_length=HOP_LENGTH,
-                               n_mfcc=N_MFCC)
-  return mfcc_
+    n_mfcc: number of MFCCs that the audio is split into
+    A higher n_mfcc would be desired for capturing a wider range of spectral features.
+    """
+    audio_signal, sr = librosa.load(path, sr=SAMPLING_RATE)
+    mfcc_ = librosa.feature.mfcc(y=audio_signal, sr=sr,
+                                 n_fft=N_FFT, hop_length=HOP_LENGTH,
+                                 n_mfcc=N_MFCC)
+    return mfcc_
 
 
 @memory.cache
 def beat_mfcc(path):
-  """
-  Aggregates MFCCs by beat.
-  The output is an array of size (n_mfcc, n_beats).
-  """
-  beat_times_ = beat_times(path)
-  mfcc_ = mfcc(path)
-  beat_mfcc_ = beat_aggregate(mfcc_, beat_times_)
-  return beat_mfcc_
+    """
+    Aggregates MFCCs by beat.
+    The output is an array of size (n_mfcc, n_beats).
+    """
+    beat_times_ = beat_times(path)
+    mfcc_ = mfcc(path)
+    beat_mfcc_ = beat_aggregate(mfcc_, beat_times_)
+    return beat_mfcc_
 
 
 @memory.cache
 def chroma_cens(path):
-  audio_signal, sr = librosa.load(path, sr=SAMPLING_RATE)
-  chroma_cens_ = librosa.feature.chroma_cens(y=audio_signal, sr=sr,
-                                             hop_length=HOP_LENGTH,
-                                             n_chroma=N_CHROMA)
-  return chroma_cens_
+    audio_signal, sr = librosa.load(path, sr=SAMPLING_RATE)
+    chroma_cens_ = librosa.feature.chroma_cens(y=audio_signal, sr=sr,
+                                              hop_length=HOP_LENGTH,
+                                              n_chroma=N_CHROMA)
+    return chroma_cens_
 
 
 @memory.cache
 def beat_chroma_cens(path):
-  beat_times_ = beat_times(path)
-  chroma_cens_ = chroma_cens(path)
-  beat_chroma_cens_ = beat_aggregate(chroma_cens_, beat_times_)
-  return beat_chroma_cens_
+    beat_times_ = beat_times(path)
+    chroma_cens_ = chroma_cens(path)
+    beat_chroma_cens_ = beat_aggregate(chroma_cens_, beat_times_)
+    return beat_chroma_cens_
 
 
 @memory.cache
 def chroma_cqt(path):
-  audio_signal, sr = librosa.load(path, sr=SAMPLING_RATE)
-  chroma_cqt_ = librosa.feature.chroma_cqt(y=audio_signal, sr=sr,
-                                           hop_length=HOP_LENGTH,
-                                           n_chroma=N_CHROMA)
-  return chroma_cqt_
+    audio_signal, sr = librosa.load(path, sr=SAMPLING_RATE)
+    chroma_cqt_ = librosa.feature.chroma_cqt(y=audio_signal, sr=sr,
+                                            hop_length=HOP_LENGTH,
+                                            n_chroma=N_CHROMA)
+    return chroma_cqt_
 
 
 @memory.cache
 def beat_chroma_cqt(path):
-  beat_times_ = beat_times(path)
-  chroma_cqt_ = chroma_cqt(path)
-  beat_chroma_cqt_ = beat_aggregate(chroma_cqt_, beat_times_)
-  return beat_chroma_cqt_
+    beat_times_ = beat_times(path)
+    chroma_cqt_ = chroma_cqt(path)
+    beat_chroma_cqt_ = beat_aggregate(chroma_cqt_, beat_times_)
+    return beat_chroma_cqt_
 
 
 @memory.cache
@@ -190,11 +195,7 @@ def beat_downbeat_probabilities(path):
     # The returned activations are assumed to be a 2D array where:
     # - Column 0: beat probabilities.
     # - Column 1: downbeat probabilities.
-    downbeat_processor = RNNDownBeatProcessor()
-    activations = downbeat_processor(path)
-    
-    # Extract the downbeat probabilities.
-    downbeat_probs = activations[:, 1]
+    _, downbeat_probs = beat_activations(path)
     
     # Convert beat timestamps (seconds) to corresponding frame indices.
     beat_frames = (beat_times_ * FPS).astype(int)  # Same FPS used for RNNDownBeatProcessor
