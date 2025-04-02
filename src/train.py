@@ -13,7 +13,8 @@ def train_model(model,
                 seed,
                 epochs=10, 
                 device='cpu',
-                save_dir='checkpoints'):
+                save_dir='checkpoints',
+                update_interval=20):
     """
     Train the TransitionPredictor model using spectrogram masking and an MSE loss.
     This version expects the DataLoader to yield only (input_tensor, S_truth_tensor),
@@ -55,7 +56,6 @@ def train_model(model,
         with tqdm(total=len(train_loader), desc=f"Epoch {epoch+1}") as pbar:
             # Iterate over batches from the train_loader
             for batch_idx, batch_data in enumerate(train_loader):
-                print(f'\t{batch_idx}')
                 # Expecting batch_data = (input_tensor, S_truth_tensor)
                 input_tensor, S_truth_tensor = batch_data
                 
@@ -107,9 +107,14 @@ def train_model(model,
                 loss_array.append(loss.item())
                 num_batches += 1
 
-                # Update the progress bar
-                pbar.update(1)
-                pbar.set_postfix({"batch_loss": loss.item()})
+                # Update the progress bar every `update_interval` batches
+                if (batch_idx + 1) % update_interval == 0:
+                    pbar.update(update_interval)
+                    pbar.set_postfix({"batch_loss": loss.item()})
+
+            # Update any remaining batches
+            if num_batches % update_interval != 0:
+                pbar.update(num_batches % update_interval)
             
         # Print average loss for this epoch
         avg_epoch_loss = epoch_loss / num_batches if num_batches > 0 else 0.0
