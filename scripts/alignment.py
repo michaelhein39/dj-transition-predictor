@@ -17,6 +17,8 @@ CASES = [
     Case(features=['chroma', 'mfcc'], key_invariant=True),
     Case(features=['chroma', 'mfcc', 'spectral_contrast'], key_invariant=False),
     Case(features=['chroma', 'mfcc', 'spectral_contrast', 'downbeat_prob', 'onset_strength'], key_invariant=False),
+    Case(features=['chroma', 'mfcc', 'downbeat_prob', 'onset_strength'], key_invariant=False),
+    Case(features=['chroma', 'downbeat_prob', 'onset_strength'], key_invariant=False)
 ]
 
 
@@ -29,11 +31,8 @@ def main():
     for _, mix in df_mlist.iterrows():
         # for case in CASES:
         #     alignment(mix.mix_id, features=case.features, key_invariant=case.key_invariant)
-        alignment(mix.mix_id,
-                  features=['chroma', 'mfcc', 'spectral_contrast', 'downbeat_prob', 'onset_strength'],
-                  key_invariant=False)
-        alignment(mix.mix_id, features=['spectral_contrast'], key_invariant=False)
-        alignment(mix.mix_id, features=['chroma', 'mfcc', 'spectral_contrast'], key_invariant=False)
+        alignment(mix.mix_id, features=['chroma', 'mfcc', 'downbeat_prob', 'onset_strength'], key_invariant=False)
+        alignment(mix.mix_id, features=['chroma', 'downbeat_prob', 'onset_strength'], key_invariant=False)
 
 
 def alignment(mix_id, features=['chroma', 'mfcc'], key_invariant=True):
