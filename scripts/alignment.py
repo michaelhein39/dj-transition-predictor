@@ -15,10 +15,19 @@ CASES = [
     Case(features=['spectral_contrast'], key_invariant=False),
     Case(features=['chroma', 'mfcc'], key_invariant=False),
     Case(features=['chroma', 'mfcc'], key_invariant=True),
-    Case(features=['chroma', 'mfcc', 'spectral_contrast'], key_invariant=False),
-    Case(features=['chroma', 'mfcc', 'spectral_contrast', 'downbeat_prob', 'onset_strength'], key_invariant=False),
-    Case(features=['chroma', 'mfcc', 'downbeat_prob', 'onset_strength'], key_invariant=False),
-    Case(features=['chroma', 'downbeat_prob', 'onset_strength'], key_invariant=False)
+    Case(features=['chroma', 'mfcc', 'spectral_contrast'], key_invariant=True),
+    Case(features=['chroma', 'mfcc', 'spectral_contrast', 'downbeat_prob', 'onset_strength'], key_invariant=True),
+    Case(features=['chroma', 'mfcc', 'downbeat_prob', 'onset_strength'], key_invariant=True),
+    Case(features=['chroma', 'downbeat_prob', 'onset_strength'], key_invariant=True),
+    Case(features=['downbeat_prob', 'onset_strength'], key_invariant=False),
+    Case(features=['downbeat_prob'], key_invariant=False),
+    Case(features=['onset_strength'], key_invariant=False),
+    Case(features=['chroma_cqt'], key_invariant=True),
+    Case(features=['chroma', 'downbeat_prob'], key_invariant=True),
+    Case(features=['chroma', 'chroma_cqt', 'downbeat_prob'], key_invariant=True),
+    Case(features=['chroma', 'chroma_cqt'], key_invariant=True),
+    Case(features=['chroma_cqt', 'downbeat_prob', 'onset_strength'], key_invariant=True),
+    Case(features=['chroma', 'chroma_cqt', 'downbeat_prob', 'onset_strength'], key_invariant=True),
 ]
 
 
@@ -29,10 +38,8 @@ df_mlist = pd.read_csv('data/meta/mixes_trunc.csv')
 def main():
     os.makedirs('data/align', exist_ok=True)
     for _, mix in df_mlist.iterrows():
-        # for case in CASES:
-        #     alignment(mix.mix_id, features=case.features, key_invariant=case.key_invariant)
-        alignment(mix.mix_id, features=['chroma', 'mfcc', 'downbeat_prob', 'onset_strength'], key_invariant=False)
-        alignment(mix.mix_id, features=['chroma', 'downbeat_prob', 'onset_strength'], key_invariant=False)
+        for case in CASES:
+            alignment(mix.mix_id, features=case.features, key_invariant=case.key_invariant)
 
 
 def alignment(mix_id, features=['chroma', 'mfcc'], key_invariant=True):
@@ -172,6 +179,8 @@ def extract_feature(path, feature_names):
         # Calculate the feature
         if feature_name == 'chroma':
             f = ft.beat_chroma_cens(path).astype('float32')
+        elif feature_name == 'chroma_cqt':
+            f = ft.beat_chroma_cqt(path).astype('float32')
         elif feature_name == 'mfcc':
             f = ft.beat_mfcc(path).astype('float32')
         elif feature_name == 'spectral_contrast':
