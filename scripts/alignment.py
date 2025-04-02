@@ -185,7 +185,7 @@ def extract_feature(path, feature_names):
         else:
             raise Exception(f'Unknown feature: {feature_name}')
         
-        # Normalize the feature
+        # Standardize the feature (z-score normalization)
         f = (f - f.mean()) / f.std()
 
         # Apply weighting for low-dimensional features
