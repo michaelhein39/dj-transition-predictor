@@ -6,14 +6,19 @@ import lib.feature as ft
 from src.cue import find_cue
 from collections import namedtuple
 
+
 Case = namedtuple('Case', ['features', 'key_invariant'])
 CASES = [
     Case(features=['mfcc'], key_invariant=False),
     Case(features=['chroma'], key_invariant=False),
     Case(features=['chroma'], key_invariant=True),
+    Case(features=['spectral_contrast'], key_invariant=False),
     Case(features=['chroma', 'mfcc'], key_invariant=False),
     Case(features=['chroma', 'mfcc'], key_invariant=True),
+    Case(features=['chroma', 'mfcc', 'spectral_contrast'], key_invariant=False),
+    Case(features=['chroma', 'mfcc', 'spectral_contrast', 'downbeat_prob', 'onset_strength'], key_invariant=False),
 ]
+
 
 df_tlist = pd.read_csv('data/meta/tracks_trunc.csv')
 df_mlist = pd.read_csv('data/meta/mixes_trunc.csv')
@@ -22,8 +27,13 @@ df_mlist = pd.read_csv('data/meta/mixes_trunc.csv')
 def main():
     os.makedirs('data/align', exist_ok=True)
     for _, mix in df_mlist.iterrows():
-        for case in CASES:
-            alignment(mix.mix_id, features=case.features, key_invariant=case.key_invariant)
+        # for case in CASES:
+        #     alignment(mix.mix_id, features=case.features, key_invariant=case.key_invariant)
+        alignment(mix.mix_id,
+                  features=['chroma', 'mfcc', 'spectral_contrast', 'downbeat_prob', 'onset_strength'],
+                  key_invariant=False)
+        alignment(mix.mix_id, features=['spectral_contrast'], key_invariant=False)
+        alignment(mix.mix_id, features=['chroma', 'mfcc', 'spectral_contrast'], key_invariant=False)
 
 
 def alignment(mix_id, features=['chroma', 'mfcc'], key_invariant=True):
@@ -41,6 +51,7 @@ def alignment(mix_id, features=['chroma', 'mfcc'], key_invariant=True):
 
     # Feature values at each beat
     # 2D matrix with beats on x-axis and different feature at each y-value
+    _ = extract_feature('data/track/jwmtj61_29_1r9f2y1p.wav', features)
     mix_feature = extract_feature(mix_path, features)
 
     # Beat times
@@ -156,6 +167,7 @@ def alignment(mix_id, features=['chroma', 'mfcc'], key_invariant=True):
 
 def extract_feature(path, feature_names):
     combined_feature = []
+    feature_shapes = {}
 
     for feature_name in feature_names:
         # Calculate the feature
@@ -163,14 +175,48 @@ def extract_feature(path, feature_names):
             f = ft.beat_chroma_cens(path).astype('float32')
         elif feature_name == 'mfcc':
             f = ft.beat_mfcc(path).astype('float32')
+        elif feature_name == 'spectral_contrast':
+            f = ft.beat_spectral_contrast(path).astype('float32')
+        elif feature_name == 'downbeat_prob':
+            # Beat-synchronous instead of beat-aggregated
+            f = ft.beat_downbeat_probabilities(path).astype('float32')
+        elif feature_name == 'onset_strength':
+            f = ft.beat_onset_strength(path).astype('float32')
         else:
             raise Exception(f'Unknown feature: {feature_name}')
         
         # Normalize the feature
         f = (f - f.mean()) / f.std()
 
+        # Apply weighting for low-dimensional features
+        if feature_name in ['downbeat_prob', 'onset_strength']:
+            # Equivalent to replicating 6 times
+            # This is done to collectively mimic the size of MFCC and CENS
+            scale_factor = np.sqrt(6)
+            f = f * scale_factor
+
+        feature_shapes[feature_name] = f.shape[-1]
         combined_feature.append(f)
+
+    # Check beat dimensions
+    beat_dims = list(feature_shapes.values())
+    min_beats = min(beat_dims)
+    max_beats = max(beat_dims)
+    if max_beats - min_beats > 1:
+        raise ValueError("Beat dimensions differ by more than 1 among features")
+    elif max_beats - min_beats == 1:
+        # Check that only downbeat_prob has the lower beat count
+        for name, dim in feature_shapes.items():
+            if name == 'downbeat_prob':
+                if dim != min_beats:
+                    raise ValueError("downbeat_prob should have one less beat than the others")
+            else:
+                if dim != max_beats:
+                    raise ValueError(f"Feature '{name}' has an unexpected beat count")
     
+    # Trim every feature to the minimum beat count
+    combined_feature = [f[:, :min_beats] for f in combined_feature]
+
     # Stack features vertically
     combined_feature = np.concatenate(combined_feature, axis=0)
 
