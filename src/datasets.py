@@ -37,7 +37,7 @@ class DJTransitionDataset(Dataset):
         file_path = self.file_list[idx]
         try:
             # Load the preprocessed tensors from the .pt file
-            input_tensor, S_truth_tensor = torch.load(file_path)
+            input_tensor, S_truth_tensor, _, _ = torch.load(file_path, weights_only=False)
         except Exception as e:
             raise RuntimeError(f"Error loading file {file_path}: {e}")
 
@@ -71,7 +71,7 @@ class SingleSampleDataset(Dataset):
     def __getitem__(self, idx):
         file_path = self.file_list[0]
         try:
-            input_tensor, S_truth_tensor, _, _ = torch.load(file_path)
+            input_tensor, S_truth_tensor, _, _ = torch.load(file_path, weights_only=False)
         except Exception as e:
             raise RuntimeError(f"Error loading file {file_path}: {e}")
         return input_tensor, S_truth_tensor
