@@ -42,6 +42,12 @@ class TransitionPredictor(nn.Module):
             nn.Linear(128, volume_control_signal_count + bandpass_control_signal_count)
         )
 
+        for layer in self.fc.modules():
+            if isinstance(layer, nn.Linear):
+                # Initialize weights with a small standard deviation and biases to zero.
+                nn.init.normal_(layer.weight, mean=0.0, std=0.01)
+                nn.init.constant_(layer.bias, 0.0)
+
     def forward(self, x):
         # x shape: (batch, 2, N_MELS, T)
         features = self.conv_layers(x) # shape: (batch, 64, 1, 1)
