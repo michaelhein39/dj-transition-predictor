@@ -3,6 +3,7 @@ import random
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from tqdm import tqdm
 
 
@@ -94,11 +95,20 @@ def train_model(model,
                 S_pred = torch.cat(S_pred_list, dim=0)
 
                 # Compute loss against ground truth
-                loss = l1_loss(S_pred, S_truth_tensor)
+                loss = mse_loss(S_pred, S_truth_tensor)
                 
                 # Backpropagation
                 loss.backward()
-                
+
+                 # Check for meaningful gradient norms
+                if (batch_idx + 1) % update_interval == 0:
+                    total_norm = 0.0
+                    for p in model.parameters():
+                        if p.grad is not None:
+                            total_norm += p.grad.data.norm(2).item() ** 2
+                    total_norm = total_norm ** 0.5
+                    print(f"Step {batch_idx} | Loss: {loss.item():.4f} | Grad Norm: {total_norm:.4f}")
+
                 # Gradient update
                 optimizer.step()
                 
@@ -150,7 +160,7 @@ def mse_loss(S_pred, S_truth):
     """
     MSE loss (L2) between predicted and ground truth mel-spectrograms.
     """
-    loss_fn = nn.MSELoss()
+    loss_fn = nn.MSELoss(reduction='sum')
     return loss_fn(S_pred, S_truth)
 
 
@@ -209,6 +219,17 @@ def prelu1(t, st, delta):
     val = torch.clamp(val, min=0.0, max=1.0)
     return val
 
+
+def reparameterize_fade(raw_st, raw_delta, frames, epsilon=1e-6, beta=0.01):
+    # Reparameterize st to be in [0, frames]
+    st = frames * torch.sigmoid(raw_st)  # with proper initialization, sigmoid(0) = 0.5, so st starts at frames/2
+
+    # Reparameterize delta using softplus and a scaling factor
+    # Lower bound: 1/(Cout - st) ensures the fade doesn't fully complete too early.
+    delta = beta * F.softplus(raw_delta) + (1.0 / (frames - st + epsilon))
+    return st, delta
+
+
 def apply_masks(S1, S2, control_signals, n_mels=128):
     """
     Given the predicted control signals and the original S1 and S2 spectrograms,
@@ -236,16 +257,16 @@ def apply_masks(S1, S2, control_signals, n_mels=128):
     """
     
     # Unpack volume parameters
-    S1_vol_start, S1_vol_slope, S2_vol_start, S2_vol_slope = control_signals[:4]
+    raw_S1_vol_start, raw_S1_vol_slope, raw_S2_vol_start, raw_S2_vol_slope = control_signals[:4]
     
     # Unpack band parameters
     band_control_signals = control_signals[4:]
-    (S1_low_start, S1_low_slope,
-     S1_mid_start, S1_mid_slope,
-     S1_high_start, S1_high_slope,
-     S2_low_start, S2_low_slope,
-     S2_mid_start, S2_mid_slope,
-     S2_high_start, S2_high_slope) = band_control_signals
+    (raw_S1_low_start, raw_S1_low_slope,
+     raw_S1_mid_start, raw_S1_mid_slope,
+     raw_S1_high_start, raw_S1_high_slope,
+     raw_S2_low_start, raw_S2_low_slope,
+     raw_S2_mid_start, raw_S2_mid_slope,
+     raw_S2_high_start, raw_S2_high_slope) = band_control_signals
 
     # Frequency bands
     low_end = n_mels // 3
@@ -253,6 +274,18 @@ def apply_masks(S1, S2, control_signals, n_mels=128):
 
     frames = S1.shape[1]
     time_vector = torch.arange(frames, dtype=torch.float32, device=S1.device)
+
+    # Reparameterize fade
+    S1_vol_start, S1_vol_slope = reparameterize_fade(raw_S1_vol_start, raw_S1_vol_slope, frames)
+    S2_vol_start, S2_vol_slope = reparameterize_fade(raw_S2_vol_start, raw_S2_vol_slope, frames)
+
+    S1_low_start, S1_low_slope = reparameterize_fade(raw_S1_low_start, raw_S1_low_slope, frames)
+    S1_mid_start, S1_mid_slope = reparameterize_fade(raw_S1_mid_start, raw_S1_mid_slope, frames)
+    S1_high_start, S1_high_slope = reparameterize_fade(raw_S1_high_start, raw_S1_high_slope, frames)
+
+    S2_low_start, S2_low_slope = reparameterize_fade(raw_S2_low_start, raw_S2_low_slope, frames)
+    S2_mid_start, S2_mid_slope = reparameterize_fade(raw_S2_mid_start, raw_S2_mid_slope, frames)
+    S2_high_start, S2_high_slope = reparameterize_fade(raw_S2_high_start, raw_S2_high_slope, frames)
 
     # Volume masks
     # S1 fade-out: M_S1_vol(t) = 1 - PReLU1(t, start, slope)
