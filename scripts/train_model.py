@@ -45,17 +45,14 @@ def set_seed(seed):
 
 
 if __name__ == '__main__':
-    lr = 1e-6
-    epochs = 10
-    model_save_name = 'mel_lr1e-6'
-
-    # Tried: 2025 (no S2), 42 (good loss, but no S2), 123 (no S2)
+    lr = 1e-5
+    epochs = 3
+    model_save_name = 'mel_lr1e-5_L1_bounding'
     seed = 2025
-
     loss_array = run_training(lr, epochs, model_save_name, seed)
 
     # Save the loss array to a file
-    os.makedirs('losses', exist_ok=True)
-    path = os.path.join('losses', f'{model_save_name}_loss_array.npy')
+    os.makedirs('training_losses', exist_ok=True)
+    path = os.path.join('training_losses', f'{model_save_name}_loss_array.npy')
     np.save(path, loss_array)
     print(f"Loss array saved at {path}")
