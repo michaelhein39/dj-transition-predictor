@@ -1,2 +1,2 @@
 # dj-transition-predictor
-Applies supervised and unsupervised machine learning techniques to predict digital signals for generating DJ transitions.
+A supervised learning framework that predicts control signals to generate DJ transitions between tracks.
