@@ -1,6 +1,8 @@
 # Audio files
-*.wav
 *.mp3
+predictions/
+mix/
+track/
 
 # Alignment data
 align/
