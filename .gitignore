@@ -4,6 +4,9 @@ predictions/
 mix/
 track/
 
+# Dataset
+*.json
+
 # Alignment data
 align/
 
