@@ -18,6 +18,8 @@ checkpoints/
 
 # CSV files
 *.csv
+!mixes_trunc.csv
+!tracks_trunc.csv
 
 # macOS
 .DS_Store
